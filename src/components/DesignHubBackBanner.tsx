@@ -20,7 +20,10 @@ export function DesignHubBackBanner() {
   return (
     <div className="bmaas-design-hub-banner" role="navigation" aria-label="Design hub">
       <Link to={buildDesignHubHomePath(topicId)} className="bmaas-design-hub-banner__link">
-        Back to home
+        <span className="bmaas-design-hub-banner__arrow" aria-hidden>
+          ←
+        </span>
+        <span>Back to home</span>
       </Link>
     </div>
   )
