@@ -1,0 +1,295 @@
+import type { CatalogSpecRow } from '../catalog/catalogSpecs'
+import {
+  getCatalogSpecRowValue,
+  resolveBaremetalCatalogCardSpecRows,
+  resolveCatalogOsImage,
+  resolveCatalogSpecRows,
+} from '../catalog/catalogSpecs'
+import type { CatalogFieldPolicy } from '../catalog/catalogPublishConfig'
+import { formatBaremetalInstanceTypeLabel } from '../catalog/catalogPublishConfig'
+import type { RegisteredOrganization } from '../providerAdmin/organizations'
+import type { ProviderCatalogDraft } from '../providerSetup/storage'
+import {
+  getCatalogItemStatus,
+  getProviderCatalogItems,
+} from '../providerSetup/storage'
+import {
+  BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
+  ensureProviderCatalogDemoItems,
+  sortByDemoCatalogOrder,
+} from '../providerSetup/prototypeEntry'
+import {
+  CATALOG_SERVICE_LABELS,
+  resolveRateCard,
+  type CatalogServiceId,
+  type PublishCatalogScope,
+  type RateCard,
+} from '../providerSetup/templateDemo'
+import {
+  ensureTenantDemoCatalogItems,
+} from '../tenantAdmin/storage'
+import {
+  toProviderCatalogDraftFromTenantCatalogItem,
+} from '../tenantAdmin/catalogItems'
+
+export type TenantUserCatalogCard = {
+  serviceId: CatalogServiceId
+  service: string
+  status: string
+  displayName: string
+  description?: string
+  categoryLabel: string
+  hardwareProfile: string
+  /** Service-aware configuration rows for cards and drawers. */
+  specRows: CatalogSpecRow[]
+  cpu: string
+  ram: string
+  gpu: string
+  osImage: string
+  footerNote: string
+  catalogItemId: string
+  templateRefId: string
+  templateName: string
+  instanceTypeLabel?: string
+  instanceTypeId?: string
+  diskImageId?: string
+  diskImageLabel?: string
+  clusterVersionMode?: 'locked' | 'editable'
+  hardwareOsMode?: 'locked' | 'editable'
+  osImageMode?: 'locked' | 'editable'
+  nodeSetId?: string
+  nodeSetLabel?: string
+  hostTypeId?: string
+  hostTypeLabel?: string
+  clusterNodeTopologyMode?: 'locked' | 'editable'
+  clusterTopology?: Array<{
+    name: string
+    machineTypeId: string
+    nodeCount: number
+  }>
+  fieldPolicies?: CatalogFieldPolicy[]
+  rateCard: RateCard
+  scope: PublishCatalogScope
+  createdAt: string
+}
+
+export const TENANT_USER_CATALOG_SPECS = {
+  categoryLabel: 'Compute · Standard',
+  hardwareProfile: 'Dell PowerEdge R750',
+  cpu: '64 vCPU',
+  ram: '512 GB',
+  gpu: 'NVIDIA A100 80 GB',
+  osImage: 'RHEL 9.4',
+  footerNote: 'Hardware pre-configured · Admin-managed',
+} as const
+
+const CLUSTER_FOOTER_NOTE = 'Cluster pre-configured · Admin-managed'
+const VM_FOOTER_NOTE = 'Instance profile pre-configured · Admin-managed'
+
+function getFooterNote(serviceId: CatalogServiceId): string {
+  if (serviceId === 'cluster') {
+    return CLUSTER_FOOTER_NOTE
+  }
+  if (serviceId === 'virtual-machine') {
+    return VM_FOOTER_NOTE
+  }
+  return TENANT_USER_CATALOG_SPECS.footerNote
+}
+
+function getHardwareProfileLabel(
+  serviceId: CatalogServiceId,
+  specRows: CatalogSpecRow[],
+): string {
+  if (serviceId === 'cluster') {
+    return (
+      specRows.find((row) => row.label === 'Cluster version' || row.label === 'Platform')?.value ??
+      'OpenShift cluster'
+    )
+  }
+  if (serviceId === 'virtual-machine') {
+    return specRows.find((row) => row.label === 'Instance type')?.value ?? 'Standard VM'
+  }
+
+  return TENANT_USER_CATALOG_SPECS.hardwareProfile
+}
+
+export const TENANT_USER_CATALOG_FALLBACK: TenantUserCatalogCard = {
+  serviceId: 'baremetal',
+  service: CATALOG_SERVICE_LABELS.baremetal,
+  status: 'Live',
+  displayName: 'bare-metal-gpu-training-server',
+  categoryLabel: TENANT_USER_CATALOG_SPECS.categoryLabel,
+  hardwareProfile: TENANT_USER_CATALOG_SPECS.hardwareProfile,
+  specRows: [
+    { label: 'Instance type', value: 'Large', badge: { text: 'Locked', color: 'grey' } },
+    { label: 'CPU', value: TENANT_USER_CATALOG_SPECS.cpu },
+    { label: 'RAM', value: TENANT_USER_CATALOG_SPECS.ram },
+    { label: 'GPU', value: TENANT_USER_CATALOG_SPECS.gpu },
+    { label: 'OS image', value: TENANT_USER_CATALOG_SPECS.osImage, badge: { text: 'Locked', color: 'grey' } },
+  ],
+  cpu: TENANT_USER_CATALOG_SPECS.cpu,
+  ram: TENANT_USER_CATALOG_SPECS.ram,
+  gpu: TENANT_USER_CATALOG_SPECS.gpu,
+  osImage: TENANT_USER_CATALOG_SPECS.osImage,
+  footerNote: TENANT_USER_CATALOG_SPECS.footerNote,
+  catalogItemId: 'cat-bm-gpu-training',
+  templateRefId: 'bm-dell-r750',
+  templateName: 'gpu-a100-training-standard',
+  instanceTypeId: 'large',
+  instanceTypeLabel: formatBaremetalInstanceTypeLabel('large'),
+  scope: 'global-public',
+  createdAt: new Date().toISOString(),
+  rateCard: {
+    hourlyRate: 4.25,
+    monthlyRate: 2850,
+    currency: 'USD',
+    billingUnit: 'per-instance',
+  },
+}
+
+function isCatalogVisibleToTenantUser(
+  item: ProviderCatalogDraft,
+  organization: RegisteredOrganization | null,
+): boolean {
+  if (getCatalogItemStatus(item) === 'unpublished') {
+    return false
+  }
+
+  if (item.scope === 'global-public') {
+    return true
+  }
+
+  if (!organization) {
+    return false
+  }
+
+  if (
+    item.catalogItemId === BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID &&
+    (organization.slug === 'northsummit' || organization.slug === 'northstar')
+  ) {
+    return true
+  }
+
+  return (
+    (item.enterpriseTenantIds?.length
+      ? item.enterpriseTenantIds
+      : item.enterpriseTenantId
+        ? [item.enterpriseTenantId]
+        : []
+    ).some(
+      (tenantId) =>
+        tenantId === organization.tenantId || tenantId === organization.id,
+    ) || organization.catalogItemId === item.catalogItemId
+  )
+}
+
+export function getTenantUserCatalogCardFromDraft(
+  catalog: ProviderCatalogDraft,
+): TenantUserCatalogCard {
+  const rateCard = resolveRateCard(catalog)
+  const serviceId = catalog.serviceId ?? 'baremetal'
+  const specRows =
+    serviceId === 'baremetal'
+      ? resolveBaremetalCatalogCardSpecRows(catalog)
+      : resolveCatalogSpecRows(catalog)
+
+  return {
+    serviceId,
+    service: CATALOG_SERVICE_LABELS[serviceId],
+    status: 'Live',
+    displayName: catalog.displayName,
+    description: catalog.description,
+    categoryLabel: specRows.map((row) => row.value).join(' · '),
+    hardwareProfile: getHardwareProfileLabel(serviceId, specRows),
+    specRows,
+    cpu: getCatalogSpecRowValue(specRows, 'CPU'),
+    ram: getCatalogSpecRowValue(specRows, 'RAM'),
+    gpu: getCatalogSpecRowValue(specRows, 'GPU'),
+    osImage: resolveCatalogOsImage(catalog),
+    footerNote: getFooterNote(serviceId),
+    catalogItemId: catalog.catalogItemId,
+    templateRefId: catalog.templateRefId,
+    templateName: catalog.templateName,
+    instanceTypeLabel: catalog.instanceTypeLabel,
+    instanceTypeId: catalog.instanceTypeId,
+    diskImageId: catalog.diskImageId,
+    diskImageLabel: catalog.diskImageLabel,
+    clusterVersionMode: catalog.clusterVersionMode,
+    hardwareOsMode: catalog.hardwareOsMode,
+    osImageMode: catalog.osImageMode,
+    nodeSetId: catalog.nodeSetId,
+    nodeSetLabel: catalog.nodeSetLabel,
+    hostTypeId: catalog.hostTypeId,
+    hostTypeLabel: catalog.hostTypeLabel,
+    clusterNodeTopologyMode: catalog.clusterNodeTopologyMode,
+    clusterTopology: catalog.clusterTopology,
+    fieldPolicies: catalog.fieldPolicies,
+    rateCard,
+    scope: catalog.scope,
+    createdAt: catalog.createdAt,
+  }
+}
+
+/** All live offerings visible to the tenant user (Bare Metal + Cluster, etc.). */
+export function getTenantUserCatalogCards(
+  organization: RegisteredOrganization | null,
+  catalogDraft: ProviderCatalogDraft | null,
+  options?: { preferCatalogDraft?: boolean },
+): TenantUserCatalogCard[] {
+  ensureProviderCatalogDemoItems()
+
+  const providerItems = getProviderCatalogItems().filter((item) =>
+    isCatalogVisibleToTenantUser(item, organization),
+  )
+
+  const cards: TenantUserCatalogCard[] = []
+
+  if (providerItems.length > 0) {
+    cards.push(
+      ...sortByDemoCatalogOrder(providerItems).map((item) =>
+        getTenantUserCatalogCardFromDraft(item),
+      ),
+    )
+  } else if (catalogDraft) {
+    cards.push(getTenantUserCatalogCardFromDraft(catalogDraft))
+  }
+
+  if (options?.preferCatalogDraft && catalogDraft) {
+    const preferredId = catalogDraft.catalogItemId
+    if (!cards.some((card) => card.catalogItemId === preferredId)) {
+      cards.unshift(getTenantUserCatalogCardFromDraft(catalogDraft))
+    }
+  }
+
+  // Live tenant-admin offerings (e.g. bare-metal-general-purpose-server).
+  if (organization?.slug) {
+    for (const item of ensureTenantDemoCatalogItems(organization.slug)) {
+      if ((item.status ?? 'Live') !== 'Live') {
+        continue
+      }
+      const draft = toProviderCatalogDraftFromTenantCatalogItem(item)
+      if (!draft) {
+        continue
+      }
+      if (cards.some((card) => card.catalogItemId === draft.catalogItemId)) {
+        continue
+      }
+      cards.unshift(getTenantUserCatalogCardFromDraft(draft))
+    }
+  }
+
+  return cards
+}
+
+/** @deprecated Prefer getTenantUserCatalogCards for multi-item catalogs. */
+export function getTenantUserCatalogCard(
+  organization: RegisteredOrganization | null,
+  catalogDraft: ProviderCatalogDraft | null,
+): TenantUserCatalogCard {
+  const cards = getTenantUserCatalogCards(organization, catalogDraft)
+  return (
+    cards.find((card) => card.serviceId === 'baremetal') ??
+    cards[0] ??
+    TENANT_USER_CATALOG_FALLBACK
+  )
+}

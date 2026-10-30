@@ -1,0 +1,83 @@
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { ConceptualDesignSticker } from './components/ConceptualDesignSticker'
+import { DesignHubBackBanner } from './components/DesignHubBackBanner'
+import { BmaasLandingPage } from './pages/BmaasLandingPage'
+import { IdpManagerSetupPage } from './pages/IdpManagerSetupPage'
+import { IdpManagerWorkspacePage } from './pages/IdpManagerWorkspacePage'
+import { M360AccountDetailsPage } from './pages/m360/M360AccountDetailsPage'
+import { M360AccountsPage } from './pages/m360/M360AccountsPage'
+import { ProviderAdminWorkspacePage } from './pages/ProviderAdminWorkspacePage'
+import { ProviderLoginPage } from './pages/ProviderLoginPage'
+import { TenantAdminSampleCatalogPage } from './pages/TenantAdminSampleCatalogPage'
+import { TenantAdminWorkspacePage } from './pages/TenantAdminWorkspacePage'
+import { TenantLoginPage } from './pages/TenantLoginPage'
+import { TenantUserWorkspacePage } from './pages/TenantUserWorkspacePage'
+
+function RedirectNorthstarIdpManager() {
+  const location = useLocation()
+  return (
+    <Navigate
+      to={`${location.pathname.replace(
+        /^\/idp-manager\/northstar/,
+        '/idp-manager/bluesolace',
+      )}${location.search}${location.hash}`}
+      replace
+    />
+  )
+}
+
+function RedirectNorthstarTenant() {
+  const location = useLocation()
+  return (
+    <Navigate
+      to={`${location.pathname.replace(/\/northstar\b/, '/northsummit')}${location.search}${location.hash}`}
+      replace
+    />
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
+      <div className="bmaas-app-shell">
+        <DesignHubBackBanner />
+        <div className="bmaas-app-shell__main">
+          <ConceptualDesignSticker />
+          <Routes>
+            <Route path="/" element={<BmaasLandingPage />} />
+            <Route path="/idp-manager/northstar/change-password" element={<RedirectNorthstarIdpManager />} />
+            <Route path="/idp-manager/northstar/workspace" element={<RedirectNorthstarIdpManager />} />
+            <Route path="/idp-manager/northstar" element={<RedirectNorthstarIdpManager />} />
+            <Route path="/idp-manager/:orgSlug/change-password" element={<IdpManagerSetupPage />} />
+            <Route path="/idp-manager/:orgSlug/workspace" element={<IdpManagerWorkspacePage />} />
+            <Route path="/idp-manager/:orgSlug" element={<IdpManagerSetupPage />} />
+            <Route path="/idp-manager" element={<IdpManagerSetupPage />} />
+            <Route path="/idp-setup/:token" element={<IdpManagerSetupPage />} />
+            <Route path="/provider" element={<ProviderLoginPage />} />
+            <Route path="/provider/setup" element={<Navigate to="/provider/workspace" replace />} />
+            <Route path="/provider/workspace" element={<ProviderAdminWorkspacePage />} />
+            <Route path="/m360/accounts" element={<M360AccountsPage />} />
+            <Route path="/m360/accounts/:accountName" element={<M360AccountDetailsPage />} />
+            <Route path="/tenant-admin/catalog-sample" element={<TenantAdminSampleCatalogPage />} />
+            <Route path="/tenant-admin/northstar/workspace" element={<RedirectNorthstarTenant />} />
+            <Route path="/tenant-admin/northstar" element={<RedirectNorthstarTenant />} />
+            <Route path="/tenant-user/northstar/workspace" element={<RedirectNorthstarTenant />} />
+            <Route path="/tenant-user/northstar" element={<RedirectNorthstarTenant />} />
+            <Route path="/osac/:tenant" element={<TenantLoginPage />} />
+            <Route path="/tenant-admin/:tenant" element={<TenantLoginPage role="tenant-admin" />} />
+            <Route
+              path="/tenant-admin/:tenant/workspace"
+              element={<TenantAdminWorkspacePage />}
+            />
+            <Route path="/tenant-user/:tenant" element={<TenantLoginPage role="tenant-user" />} />
+            <Route
+              path="/tenant-user/:tenant/workspace"
+              element={<TenantUserWorkspacePage />}
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </div>
+    </BrowserRouter>
+  )
+}

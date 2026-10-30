@@ -1,0 +1,648 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import {
+  Button,
+  Card,
+  CardBody,
+  Content,
+  EmptyState,
+  EmptyStateBody,
+  Flex,
+  FlexItem,
+  Label,
+  SearchInput,
+  Title,
+} from '@patternfly/react-core'
+import { RhUiCatalogAltIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-catalog-alt-icon'
+import { LockIcon } from '@patternfly/react-icons/dist/esm/icons/lock-icon'
+import { RocketIcon } from '@patternfly/react-icons/dist/esm/icons/rocket-icon'
+import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr, type IAction } from '@patternfly/react-table'
+import {
+  CatalogServiceFilterToggle,
+  countCatalogServices,
+  toggleCatalogServiceFilter,
+} from '../../components/catalog/CatalogServiceFilterToggle'
+import { CatalogFilterEmptyState } from '../../components/catalog/CatalogFilterEmptyState'
+import { CatalogFilterResultsSummary } from '../../components/catalog/CatalogFilterResultsSummary'
+import { CatalogSpecRowsList } from '../../components/catalog/CatalogSpecRowsList'
+import { CatalogRateCell } from '../../components/catalog/CatalogRateCell'
+import { CatalogViewToggle } from '../../components/catalog/CatalogViewToggle'
+import {
+  createCatalogServiceFilterSet,
+  describeCatalogServiceFilter,
+} from '../../catalog/catalogFilterSummary'
+import { TenantUserCatalogItemDetailsPage } from '../../components/tenant-user/TenantUserCatalogItemDetailsPage'
+import { TenantUserLaunchInstanceWizard } from '../../components/tenant-user/TenantUserLaunchInstanceWizard'
+import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
+import { getCatalogViewMode, setCatalogViewMode, type CatalogViewMode } from '../../catalog/viewMode'
+import type { RegisteredOrganization } from '../../providerAdmin/organizations'
+import type { ProviderCatalogDraft } from '../../providerSetup/storage'
+import { getProviderCatalogItems } from '../../providerSetup/storage'
+import {
+  CATALOG_SERVICE_FILTER_LABELS,
+  formatRateCardSummary,
+  type CatalogServiceId,
+} from '../../providerSetup/templateDemo'
+import {
+  getTenantUserCatalogCards,
+  type TenantUserCatalogCard,
+} from '../../tenantUser/catalog'
+import { LAUNCH_INSTANCE_WIZARD_DEMO } from '../../tenantUser/launchInstanceWizard'
+import { TENANT_USER_CATALOG_PAGE } from '../../tenantUser/constants'
+import type { TenantInstance } from '../../tenantUser/instances'
+import type { TenantProject } from '../../tenantAdmin/projects'
+import {
+  isTenantScopedCatalogItemId,
+  toProviderCatalogDraftFromTenantCatalogItem,
+} from '../../tenantAdmin/catalogItems'
+import { getTenantCatalogItems } from '../../tenantAdmin/storage'
+import {
+  findCatalogItemByWorkspaceParam,
+  getWorkspaceCatalogItemParam,
+  syncWorkspaceCatalogItemParam,
+} from '../../shared/workspaceNavUrl'
+
+type TenantUserCatalogPageProps = {
+  organization: RegisteredOrganization | null
+  catalogDraft: ProviderCatalogDraft | null
+  tenantSlug: string
+  projects: readonly TenantProject[]
+  allProjects?: readonly TenantProject[]
+  initialProjectId?: string | null
+  onProjectScopeChange?: (projectId: string) => void
+  onNavigateToProjectsTeams: () => void
+  /** When true, open the launch wizard immediately (provider preview). */
+  autoOpenLaunchWizard?: boolean
+  /** Prefer the provided catalog draft even if org assignment differs. */
+  preferCatalogDraft?: boolean
+  /** When set, open this catalog item's detail page (id or display name). */
+  openCatalogItemKey?: string | null
+  onOpenCatalogItemConsumed?: () => void
+  existingInstanceNames?: readonly string[]
+  onProvisioningStarted: (instance: TenantInstance) => void
+  onDismissDuringProvisioning: (instanceId: string, serviceId: CatalogServiceId) => void
+  onWizardFinished: (instanceId: string, serviceId: CatalogServiceId) => void
+}
+
+function getCatalogItemActions(
+  onViewDetails: () => void,
+  onLaunch: () => void,
+): IAction[] {
+  return [
+    {
+      title: 'View details',
+      onClick: onViewDetails,
+    },
+    {
+      title: LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel,
+      onClick: onLaunch,
+    },
+  ]
+}
+
+function resolveLaunchCatalogDraft(
+  card: TenantUserCatalogCard,
+  fallback: ProviderCatalogDraft | null,
+  tenantSlug: string,
+): ProviderCatalogDraft | null {
+  const fromProvider = getProviderCatalogItems().find(
+    (item) => item.catalogItemId === card.catalogItemId,
+  )
+  if (fromProvider) {
+    return fromProvider
+  }
+
+  if (isTenantScopedCatalogItemId(card.catalogItemId)) {
+    const stored = getTenantCatalogItems(tenantSlug).find((item) => item.id === card.catalogItemId)
+    if (stored) {
+      return toProviderCatalogDraftFromTenantCatalogItem(stored)
+    }
+  }
+
+  return fallback
+}
+
+/** Grid: blue label chip. List: subtle subtext under the item name. */
+function TenantUserCatalogServiceType({
+  service,
+  variant,
+}: {
+  service: string
+  variant: 'grid' | 'list'
+}) {
+  if (variant === 'grid') {
+    return (
+      <Label color="blue" className="tenant-user-catalog__card-label">
+        {service}
+      </Label>
+    )
+  }
+
+  return (
+    <Content component="p" className="tenant-user-catalog__service-type">
+      {service}
+    </Content>
+  )
+}
+
+export function TenantUserCatalogPage({
+  organization,
+  catalogDraft,
+  tenantSlug,
+  projects,
+  allProjects,
+  initialProjectId = null,
+  onProjectScopeChange,
+  autoOpenLaunchWizard = false,
+  preferCatalogDraft = false,
+  openCatalogItemKey = null,
+  onOpenCatalogItemConsumed,
+  existingInstanceNames = [],
+  onProvisioningStarted,
+  onDismissDuringProvisioning,
+  onWizardFinished,
+}: TenantUserCatalogPageProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [viewMode, setViewMode] = useState<CatalogViewMode>(() => getCatalogViewMode('grid'))
+  const [isWizardOpen, setIsWizardOpen] = useState(false)
+  const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false)
+  const [searchValue, setSearchValue] = useState('')
+  const catalogItems = useMemo(
+    () =>
+      getTenantUserCatalogCards(organization, catalogDraft, {
+        preferCatalogDraft,
+      }),
+    [organization, catalogDraft, preferCatalogDraft],
+  )
+  const [selectedCatalogItem, setSelectedCatalogItem] = useState<TenantUserCatalogCard | null>(
+    () => catalogItems[0] ?? null,
+  )
+  const initialServiceFilters = catalogItems.map((item) => item.serviceId)
+  const [selectedFilters, setSelectedFilters] = useState<Set<CatalogServiceId>>(
+    () => new Set(initialServiceFilters.length > 0 ? initialServiceFilters : ['baremetal']),
+  )
+  const knownServiceFiltersRef = useRef(new Set(initialServiceFilters))
+  const itemParam = getWorkspaceCatalogItemParam(searchParams)
+
+  useEffect(() => {
+    setSelectedFilters((current) => {
+      const next = new Set(current)
+      let changed = false
+
+      for (const item of catalogItems) {
+        if (!knownServiceFiltersRef.current.has(item.serviceId)) {
+          knownServiceFiltersRef.current.add(item.serviceId)
+          next.add(item.serviceId)
+          changed = true
+        }
+      }
+
+      return changed ? next : current
+    })
+  }, [catalogItems])
+
+  useEffect(() => {
+    if (!selectedCatalogItem) {
+      setSelectedCatalogItem(catalogItems[0] ?? null)
+      return
+    }
+
+    const stillPresent = catalogItems.some(
+      (item) => item.catalogItemId === selectedCatalogItem.catalogItemId,
+    )
+    if (!stillPresent) {
+      setSelectedCatalogItem(catalogItems[0] ?? null)
+    }
+  }, [catalogItems, selectedCatalogItem])
+
+  useEffect(() => {
+    if (!autoOpenLaunchWizard || catalogItems.length === 0) {
+      return
+    }
+
+    const preferred =
+      (preferCatalogDraft && catalogDraft
+        ? catalogItems.find((item) => item.catalogItemId === catalogDraft.catalogItemId)
+        : null) ?? catalogItems[0]!
+    setSelectedCatalogItem(preferred)
+    setIsWizardOpen(true)
+  }, [autoOpenLaunchWizard, catalogDraft, catalogItems, preferCatalogDraft])
+
+  useEffect(() => {
+    if (!openCatalogItemKey) {
+      return
+    }
+
+    const match = findCatalogItemByWorkspaceParam(catalogItems, openCatalogItemKey)
+    if (match) {
+      setSelectedCatalogItem(match)
+      setIsDetailsDrawerOpen(true)
+      setIsWizardOpen(false)
+      syncWorkspaceCatalogItemParam(setSearchParams, match.displayName, { replace: true })
+    }
+
+    onOpenCatalogItemConsumed?.()
+  }, [openCatalogItemKey, catalogItems, onOpenCatalogItemConsumed, setSearchParams])
+
+  useEffect(() => {
+    const match = findCatalogItemByWorkspaceParam(catalogItems, itemParam)
+    if (match) {
+      setSelectedCatalogItem(match)
+      if (!isWizardOpen) {
+        setIsDetailsDrawerOpen(true)
+      }
+      return
+    }
+
+    if (!itemParam) {
+      setIsDetailsDrawerOpen(false)
+    }
+  }, [itemParam, catalogItems, isWizardOpen])
+
+  const serviceCounts = useMemo(
+    () => countCatalogServices(catalogItems.map((item) => item.serviceId)),
+    [catalogItems],
+  )
+
+  const filteredItems = useMemo(() => {
+    const query = searchValue.trim().toLowerCase()
+
+    return catalogItems.filter((item) => {
+      if (!selectedFilters.has(item.serviceId)) {
+        return false
+      }
+
+      if (!query) {
+        return true
+      }
+
+      return (
+        item.displayName.toLowerCase().includes(query) ||
+        item.service.toLowerCase().includes(query) ||
+        item.catalogItemId.toLowerCase().includes(query) ||
+        item.templateName.toLowerCase().includes(query) ||
+        item.specRows.some(
+          (row) =>
+            row.label.toLowerCase().includes(query) || row.value.toLowerCase().includes(query),
+        )
+      )
+    })
+  }, [catalogItems, selectedFilters, searchValue])
+
+  const handleViewModeChange = (nextViewMode: CatalogViewMode) => {
+    setViewMode(nextViewMode)
+    setCatalogViewMode(nextViewMode)
+  }
+
+  const handleFilterToggle = (serviceId: CatalogServiceId, isSelected: boolean) => {
+    setSelectedFilters((current) => toggleCatalogServiceFilter(current, serviceId, isSelected))
+  }
+
+  const catalogServiceIds = useMemo(
+    () => catalogItems.map((item) => item.serviceId),
+    [catalogItems],
+  )
+
+  const filterDescriptionParts = useMemo(() => {
+    const parts: string[] = []
+    const serviceDescription = describeCatalogServiceFilter(selectedFilters, catalogServiceIds)
+    if (serviceDescription) {
+      parts.push(`service: ${serviceDescription}`)
+    }
+    if (searchValue.trim()) {
+      parts.push(`search: "${searchValue.trim()}"`)
+    }
+    return parts
+  }, [catalogServiceIds, searchValue, selectedFilters])
+
+  const clearAllFilters = () => {
+    setSearchValue('')
+    setSelectedFilters(createCatalogServiceFilterSet(catalogServiceIds))
+  }
+
+  const hasAnyItems = catalogItems.length > 0
+  const singleSelectedServiceId =
+    selectedFilters.size === 1 ? [...selectedFilters][0]! : null
+  const isSingleServiceTrueEmpty =
+    hasAnyItems &&
+    filteredItems.length === 0 &&
+    singleSelectedServiceId !== null &&
+    !searchValue.trim()
+
+  const emptyStateTitle = (() => {
+    if (!hasAnyItems) {
+      return 'No catalog items yet'
+    }
+    if (selectedFilters.size === 0) {
+      return 'Select a service to view catalog items'
+    }
+    if (searchValue.trim()) {
+      return 'No catalog items match your search'
+    }
+    if (singleSelectedServiceId) {
+      return `No ${CATALOG_SERVICE_FILTER_LABELS[singleSelectedServiceId]} items yet`
+    }
+    return 'No catalog items for the selected services'
+  })()
+
+  const emptyStateBody = (() => {
+    if (!hasAnyItems) {
+      return 'Browse catalog items once your organization administrator publishes offerings.'
+    }
+    if (selectedFilters.size === 0) {
+      return 'Choose one or more services above to filter the catalog.'
+    }
+    if (searchValue.trim()) {
+      return 'Try a different search term or clear the search field.'
+    }
+    return 'No catalog items match the selected services.'
+  })()
+
+  const emptyStateIcon = !hasAnyItems ? (
+    <RhUiCatalogAltIcon />
+  ) : singleSelectedServiceId ? (
+    getCatalogServiceIcon(singleSelectedServiceId)
+  ) : (
+    <RhUiCatalogAltIcon />
+  )
+
+  const openDetails = (item: TenantUserCatalogCard) => {
+    setSelectedCatalogItem(item)
+    setIsWizardOpen(false)
+    setIsDetailsDrawerOpen(true)
+    syncWorkspaceCatalogItemParam(setSearchParams, item.displayName)
+  }
+
+  const closeDetails = () => {
+    setIsDetailsDrawerOpen(false)
+    syncWorkspaceCatalogItemParam(setSearchParams, null)
+  }
+
+  const closeLaunchWizard = () => {
+    setIsWizardOpen(false)
+  }
+
+  const openLaunchWizard = (item: TenantUserCatalogCard) => {
+    setSelectedCatalogItem(item)
+    setIsDetailsDrawerOpen(false)
+    setIsWizardOpen(true)
+    syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
+  }
+
+  const activeCatalogItem = selectedCatalogItem ?? catalogItems[0] ?? null
+  const detailsItem = isDetailsDrawerOpen ? selectedCatalogItem : null
+  const launchCatalogDraft = activeCatalogItem
+    ? resolveLaunchCatalogDraft(activeCatalogItem, catalogDraft, tenantSlug)
+    : catalogDraft
+
+  return (
+    <>
+      {isWizardOpen && activeCatalogItem ? (
+        <TenantUserLaunchInstanceWizard
+          presentation="page"
+          isOpen={isWizardOpen}
+          catalogItem={activeCatalogItem}
+          organization={organization}
+          catalogDraft={launchCatalogDraft}
+          preferCatalogDraft={preferCatalogDraft || isTenantScopedCatalogItemId(activeCatalogItem.catalogItemId)}
+          tenantSlug={tenantSlug}
+          projects={projects}
+          allProjects={allProjects}
+          canManageNetworkObjects
+          initialProjectId={initialProjectId}
+          onProjectScopeChange={onProjectScopeChange}
+          existingInstanceNames={existingInstanceNames}
+          onClose={closeLaunchWizard}
+          onBackToCatalogItem={() => {
+            if (activeCatalogItem) {
+              setIsWizardOpen(false)
+              setIsDetailsDrawerOpen(true)
+              syncWorkspaceCatalogItemParam(setSearchParams, activeCatalogItem.displayName)
+            }
+          }}
+          onProvisioningStarted={onProvisioningStarted}
+          onDismissDuringProvisioning={(instanceId, serviceId) => {
+            onDismissDuringProvisioning(instanceId, serviceId)
+            closeLaunchWizard()
+          }}
+          onWizardFinished={(instanceId, serviceId) => {
+            onWizardFinished(instanceId, serviceId)
+            closeLaunchWizard()
+          }}
+        />
+      ) : detailsItem ? (
+        <TenantUserCatalogItemDetailsPage
+          catalogItem={detailsItem}
+          onBack={closeDetails}
+          onLaunch={() => openLaunchWizard(detailsItem)}
+        />
+      ) : (
+      <div className="tenant-user-workspace-page tenant-user-catalog">
+        <Flex
+          className="tenant-user-catalog__page-header"
+          justifyContent={{ default: 'justifyContentSpaceBetween' }}
+          alignItems={{ default: 'alignItemsFlexStart' }}
+          gap={{ default: 'gapMd' }}
+        >
+          <FlexItem>
+            <Title headingLevel="h1" size="3xl" className="tenant-user-catalog__title">
+              Catalog
+            </Title>
+            <Content component="p" className="tenant-user-catalog__lede">
+              {TENANT_USER_CATALOG_PAGE.organizationLede}
+            </Content>
+          </FlexItem>
+        </Flex>
+
+        {hasAnyItems ? (
+          <div className="catalog-view-toolbar tenant-user-catalog__toolbar">
+            <div className="catalog-view-toolbar__start">
+              <CatalogServiceFilterToggle
+                selectedFilters={selectedFilters}
+                serviceCounts={serviceCounts}
+                onToggle={handleFilterToggle}
+              />
+              <SearchInput
+                className="catalog-search"
+                placeholder="Search catalog items"
+                value={searchValue}
+                onChange={(_event, value) => setSearchValue(value)}
+                onClear={() => setSearchValue('')}
+                aria-label="Search catalog items"
+              />
+            </div>
+            <CatalogViewToggle viewMode={viewMode} onChange={handleViewModeChange} />
+          </div>
+        ) : null}
+
+        {filteredItems.length === 0 ? (
+          hasAnyItems && filterDescriptionParts.length > 0 && !isSingleServiceTrueEmpty ? (
+            <CatalogFilterEmptyState
+              title="No catalog items match your filters"
+              description="Try a different service or search term."
+              onClearFilters={clearAllFilters}
+            />
+          ) : (
+          <EmptyState className="tenant-user-catalog__empty osac-standard-empty">
+            <span className="osac-standard-empty__icon" aria-hidden>
+              {emptyStateIcon}
+            </span>
+            <Title headingLevel="h2" size="lg">
+              {emptyStateTitle}
+            </Title>
+            <EmptyStateBody>{emptyStateBody}</EmptyStateBody>
+          </EmptyState>
+          )
+        ) : viewMode === 'grid' ? (
+          <>
+            <CatalogFilterResultsSummary
+              filteredCount={filteredItems.length}
+              totalCount={catalogItems.length}
+              singular="catalog item"
+              filterParts={filterDescriptionParts}
+              onClearFilters={clearAllFilters}
+            />
+          <div className="catalog-card-grid tenant-user-catalog__grid">
+            {filteredItems.map((item) => {
+              const catalogItemActions = getCatalogItemActions(
+                () => openDetails(item),
+                () => openLaunchWizard(item),
+              )
+
+              return (
+                <Card key={item.catalogItemId} isCompact={false} className="tenant-user-catalog__card">
+                  <CardBody>
+                    <div className="tenant-user-catalog__card-header">
+                      <span className="tenant-user-catalog__icon" aria-hidden>
+                        {getCatalogServiceIcon(item.serviceId)}
+                      </span>
+                      <div className="tenant-user-catalog__card-header-actions">
+                        <TenantUserCatalogServiceType service={item.service} variant="grid" />
+                        <Label color="green" className="tenant-user-catalog__card-label">
+                          {item.status}
+                        </Label>
+                        <ActionsColumn items={catalogItemActions} />
+                      </div>
+                    </div>
+
+                    <Content component="p" className="tenant-user-catalog__primary-cell">
+                      <Button
+                        variant="link"
+                        isInline
+                        className="tenant-user-catalog__name-link catalog-item-name-link"
+                        onClick={() => openDetails(item)}
+                      >
+                        {item.displayName}
+                      </Button>
+                    </Content>
+
+                    <CatalogSpecRowsList
+                      rows={item.specRows}
+                      className="tenant-user-catalog__specs-list"
+                      rowClassName="tenant-user-catalog__spec-row"
+                      labelClassName="tenant-user-catalog__spec-label"
+                      valueClassName="tenant-user-catalog__spec-value"
+                    />
+
+                    <dl className="tenant-user-catalog__card-specs">
+                      <div className="tenant-user-catalog__card-spec">
+                        <dt>Rate</dt>
+                        <dd>{formatRateCardSummary(item.rateCard)}</dd>
+                      </div>
+                    </dl>
+
+                    <div className="tenant-user-catalog__footer-note">
+                      <LockIcon aria-hidden />
+                      <span>{item.footerNote}</span>
+                    </div>
+                    <Button
+                      variant="primary"
+                      icon={<RocketIcon />}
+                      isBlock
+                      onClick={() => openLaunchWizard(item)}
+                      className="tenant-user-catalog__launch-button"
+                    >
+                      {LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel}
+                    </Button>
+                  </CardBody>
+                </Card>
+              )
+            })}
+          </div>
+          </>
+        ) : (
+          <div className="catalog-table-panel">
+            <CatalogFilterResultsSummary
+              filteredCount={filteredItems.length}
+              totalCount={catalogItems.length}
+              singular="catalog item"
+              filterParts={filterDescriptionParts}
+              onClearFilters={clearAllFilters}
+            />
+            <Table
+              aria-label="Catalog items"
+              className="catalog-data-table tenant-user-catalog__table"
+            >
+              <Thead>
+                <Tr>
+                  <Th className="tenant-user-catalog__col-name">Name</Th>
+                  <Th className="tenant-user-catalog__col-status">Status</Th>
+                  <Th className="tenant-user-catalog__col-configuration">Configuration</Th>
+                  <Th className="tenant-user-catalog__col-rate">Rate</Th>
+                  <Th className="tenant-user-catalog__col-action">Action</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {filteredItems.map((item) => (
+                  <Tr key={item.catalogItemId}>
+                    <Td dataLabel="Name" className="tenant-user-catalog__col-name">
+                      <Content component="p" className="tenant-user-catalog__display-name">
+                        <Button
+                          variant="link"
+                          isInline
+                          className="tenant-user-catalog__name-link catalog-item-name-link"
+                          onClick={() => openDetails(item)}
+                        >
+                          {item.displayName}
+                        </Button>
+                      </Content>
+                      <TenantUserCatalogServiceType service={item.service} variant="list" />
+                    </Td>
+                    <Td dataLabel="Status" className="tenant-user-catalog__col-status">
+                      <Label color="green" isCompact>
+                        {item.status}
+                      </Label>
+                    </Td>
+                    <Td dataLabel="Configuration" className="tenant-user-catalog__col-configuration">
+                      <CatalogSpecRowsList
+                        rows={item.specRows}
+                        className="catalog-table-specs-list"
+                        rowClassName="catalog-table-spec-row"
+                        labelClassName="catalog-table-spec-label"
+                        valueClassName="catalog-table-spec-value"
+                      />
+                    </Td>
+                    <Td dataLabel="Rate" className="tenant-user-catalog__col-rate">
+                      <CatalogRateCell rateCard={item.rateCard} />
+                    </Td>
+                    <Td dataLabel="Action" className="tenant-user-catalog__col-action">
+                      <Button
+                        variant="primary"
+                        icon={<RocketIcon />}
+                        onClick={() => openLaunchWizard(item)}
+                        className="tenant-user-catalog__launch-button"
+                      >
+                        {LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel}
+                      </Button>
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </div>
+        )}
+      </div>
+      )}
+    </>
+  )
+}

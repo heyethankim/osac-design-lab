@@ -1,0 +1,2926 @@
+import type { ProviderServiceId } from './constants'
+import type { ProviderAdminNavId } from '../providerAdmin/constants'
+import { resolveProviderAdminNavId } from '../providerAdmin/constants'
+import {
+  createDemoBlueSolaceOnboardingOrganization,
+  createDemoHarborlineCapitalOrganization,
+  createDemoNorthSummitBankOrganization,
+  createDemoRedwoodMutualOrganization,
+  DEMO_BLUESOLACE_ORG_ID,
+  DEMO_HARBORLINE_CAPITAL_ORG_ID,
+  DEMO_HARBORLINE_CAPITAL_SLUG,
+  DEMO_IDP_MANAGER_ORG_SLUG,
+  DEMO_NORTH_SUMMIT_BANK_ADDITIONAL_DOMAIN,
+  DEMO_NORTH_SUMMIT_BANK_BILLING_ACCOUNT_NAME,
+  DEMO_NORTH_SUMMIT_BANK_IDP_CLIENT_ID,
+  DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME,
+  DEMO_NORTH_SUMMIT_BANK_ORG_ID,
+  DEMO_NORTH_SUMMIT_BANK_ORG_NAME,
+  DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN,
+  DEMO_NORTH_SUMMIT_BANK_SLUG,
+  DEMO_REDWOOD_MUTUAL_ORG_ID,
+  DEMO_REDWOOD_MUTUAL_SLUG,
+  DEMO_BLUESOLACE_ADDITIONAL_DOMAIN,
+  DEMO_BLUESOLACE_BILLING_ACCOUNT_NAME,
+  DEMO_BLUESOLACE_IDP_CLIENT_ID,
+  DEMO_BLUESOLACE_IDP_DISPLAY_NAME,
+  DEMO_BLUESOLACE_ORG_NAME,
+  DEMO_BLUESOLACE_PRIMARY_DOMAIN,
+  DEFAULT_REGISTER_ORGANIZATION_FORM,
+  DEFAULT_REGISTER_ORGANIZATION_TENANT_ADMIN,
+  hasBreakGlassAccount,
+  hasPendingIdpInvite,
+  generateBreakGlassUsername,
+  getDemoBreakGlassPassword,
+  rewriteBreakGlassPassword,
+  isOrganizationAssignedRoleId,
+  migrateLegacyIdentityProviderClientId,
+  hydrateIdentityProvidersFromOrganizationFields,
+  normalizeAdditionalDomains,
+  normalizeDemoCompanyLogoSrc,
+  normalizeOrganizationIdentityProviders,
+  resolveIdentityProviderConnectedBy,
+  type OrganizationRoleAssignment,
+  type RegisteredOrganization,
+} from '../providerAdmin/organizations'
+import type { ComputeImage } from '../providerAdmin/computeImages'
+import { DEFAULT_COMPUTE_IMAGES } from '../providerAdmin/computeImages'
+import type { ExternalIpPool } from '../providerAdmin/externalIpPools'
+import { DEFAULT_EXTERNAL_IP_POOLS, DEFAULT_NORTHSUMMIT_EXTERNAL_IP_POOL_DESCRIPTION, DEFAULT_PROVIDER_EXTERNAL_IP_POOL_DESCRIPTION, getExternalIpPoolById, getExternalIpPoolDefaultDescription } from '../providerAdmin/externalIpPools'
+import type {
+  ProviderSecurityGroup,
+  ProviderSubnet,
+  ProviderVirtualNetwork,
+} from '../providerAdmin/networkInventory'
+import {
+  DEFAULT_PROVIDER_SECURITY_GROUPS,
+  DEFAULT_PROVIDER_SUBNETS,
+  DEFAULT_PROVIDER_VIRTUAL_NETWORKS,
+  ensureDemoNatGatewayOnTenantWorkload,
+  getNetworkInventoryStatus,
+  toCatalogNetworkOption,
+} from '../providerAdmin/networkInventory'
+import type { CatalogNetworkPolicy, CatalogNetworkResourceOption } from '../providerAdmin/catalogNetworkPolicy'
+import { removeInventoryItemById, replaceInventoryItemById } from '../networking/networkInventoryStorageUtils'
+import {
+  normalizeCatalogNetworkPolicy,
+  resolveCatalogNetworkPolicy,
+  toExternalIpPoolCatalogOption,
+} from '../providerAdmin/catalogNetworkPolicy'
+import type {
+  CatalogClusterNodeTopologyMode,
+  CatalogClusterVersionMode,
+  CatalogFieldPolicy,
+  CatalogHardwareOsMode,
+} from '../catalog/catalogPublishConfig'
+import type {
+  CatalogServiceId,
+  PublishCatalogScope,
+  PublishedTemplatePayload,
+  RateCard,
+  SavedMasterTemplate,
+} from './templateDemo'
+import { DEFAULT_CATALOG_ITEM_DISPLAY_NAME, DEFAULT_RATE_CARD, generateCatalogItemId } from './templateDemo'
+
+const PROVIDER_SETUP_COMPLETE_KEY = 'bmaas-provider-setup-complete'
+const PROVIDER_SELECTED_SERVICES_KEY = 'bmaas-provider-selected-services'
+const PROVIDER_ACTIVE_NAV_KEY = 'bmaas-provider-active-nav'
+const PROVIDER_CATALOG_DRAFT_KEY = 'bmaas-provider-catalog-draft'
+const PROVIDER_CATALOG_ITEMS_KEY = 'bmaas-provider-catalog-items'
+const PROVIDER_SAVED_TEMPLATE_KEY = 'bmaas-provider-saved-template'
+const PROVIDER_SAVED_TEMPLATES_KEY = 'bmaas-provider-saved-templates'
+const PROVIDER_REGISTERED_ORGS_KEY = 'bmaas-provider-registered-orgs'
+const PROVIDER_EXTERNAL_IP_POOLS_KEY = 'bmaas-provider-external-ip-pools'
+const PROVIDER_VIRTUAL_NETWORKS_KEY = 'bmaas-provider-virtual-networks'
+const PROVIDER_SUBNETS_KEY = 'bmaas-provider-subnets'
+const PROVIDER_SECURITY_GROUPS_KEY = 'bmaas-provider-security-groups'
+const PROVIDER_COMPUTE_IMAGES_KEY = 'bmaas-provider-compute-images'
+const PROVIDER_OPEN_REGISTER_ORG_WIZARD_KEY = 'bmaas-provider-open-register-org-wizard'
+const PROVIDER_VIP_CATALOG_RESUME_KEY = 'bmaas-provider-vip-catalog-resume'
+
+export function isProviderSetupComplete(): boolean {
+  try {
+    return sessionStorage.getItem(PROVIDER_SETUP_COMPLETE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function setProviderSetupComplete(): void {
+  try {
+    sessionStorage.setItem(PROVIDER_SETUP_COMPLETE_KEY, 'true')
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function clearProviderSetupComplete(): void {
+  try {
+    sessionStorage.removeItem(PROVIDER_SETUP_COMPLETE_KEY)
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function isProviderServicesSelected(): boolean {
+  return getProviderSelectedServices().length > 0
+}
+
+export function getProviderSelectedServices(): ProviderServiceId[] {
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_SELECTED_SERVICES_KEY)
+    if (!raw) {
+      return []
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed.filter(
+      (id): id is ProviderServiceId =>
+        id === 'baremetal' || id === 'cluster' || id === 'models' || id === 'virtual-machine',
+    )
+  } catch {
+    return []
+  }
+}
+
+export function setProviderSelectedServices(services: ProviderServiceId[]): void {
+  try {
+    sessionStorage.setItem(PROVIDER_SELECTED_SERVICES_KEY, JSON.stringify(services))
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function clearProviderServicesSelected(): void {
+  try {
+    sessionStorage.removeItem(PROVIDER_SELECTED_SERVICES_KEY)
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function getProviderActiveNav(): ProviderAdminNavId {
+  try {
+    const value = sessionStorage.getItem(PROVIDER_ACTIVE_NAV_KEY)
+    if (
+      value === 'overview' ||
+      value === 'catalog' ||
+      value === 'services-baremetal' ||
+      value === 'services-clusters' ||
+      value === 'services-models' ||
+      value === 'services-virtual-machines' ||
+      value === 'projects-teams' ||
+      value === 'infrastructure-data-centers' ||
+      value === 'infrastructure-hardware-inventory' ||
+      value === 'infrastructure-bmaas-templates' ||
+      value === 'networking' ||
+      value === 'networking-virtual-networks' ||
+      value === 'networking-external-ip-pools' ||
+      value === 'secrets' ||
+      value === 'administration-organizations' ||
+      value === 'administration-billing' ||
+      value === 'administration-rate-cards' ||
+      value === 'system'
+    ) {
+      return resolveProviderAdminNavId(value)
+    }
+
+    if (value === 'infrastructure-compute-images') {
+      return 'infrastructure-bmaas-templates'
+    }
+
+    if (value === 'services' || value === 'my-instances' || value === 'instances') {
+      return 'catalog'
+    }
+
+    if (value === 'administration-rbac' || value === 'administration-roles') {
+      return 'administration-organizations'
+    }
+
+    if (value === 'infrastructure') {
+      return 'infrastructure-data-centers'
+    }
+
+    if (value === 'infrastructure-virtual-networks') {
+      return 'catalog'
+    }
+
+    if (
+      value === 'infrastructure-subnets' ||
+      value === 'networking-subnets' ||
+      value === 'infrastructure-security-groups' ||
+      value === 'networking-security-groups' ||
+      value === 'infrastructure-external-ip-pools'
+    ) {
+      return resolveProviderAdminNavId('networking-external-ip-pools')
+    }
+
+    if (value === 'administration-quotas' || value === 'administration-organizations-quotas') {
+      return 'administration-billing'
+    }
+
+    if (value === 'billing-metering') {
+      return 'administration-rate-cards'
+    }
+
+    if (value === 'administration' || value === 'access-security') {
+      return 'administration-organizations'
+    }
+  } catch {
+    /* demo storage unavailable */
+  }
+
+  return 'overview'
+}
+
+export function setProviderActiveNav(navId: ProviderAdminNavId): void {
+  try {
+    sessionStorage.setItem(PROVIDER_ACTIVE_NAV_KEY, navId)
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export type CatalogItemStatus = 'live' | 'unpublished'
+
+export type ProviderCatalogDraft = {
+  catalogItemId: string
+  templateRefId: string
+  templateName: string
+  displayName: string
+  /** Optional for items created before description existed. */
+  description?: string
+  scope: PublishCatalogScope
+  createdAt: string
+  rateCard: RateCard
+  /** Optional for drafts created before the service step existed. */
+  serviceId?: CatalogServiceId
+  /** Present when visibility is VIP enterprise. */
+  enterpriseTenantId?: string
+  /** Present when VIP targets multiple enterprises; first entry mirrors enterpriseTenantId. */
+  enterpriseTenantIds?: string[]
+  /** Defaults to live for items created before status existed. */
+  status?: CatalogItemStatus
+  /** Optional for items created before network policy existed. */
+  networkPolicy?: CatalogNetworkPolicy
+  /** Instance type / hardware flavor (optional; falls back to template hardware). */
+  instanceTypeId?: string
+  instanceTypeLabel?: string
+  /** Disk / OS image for BM/VM, or cluster version id/label for Cluster as a Service. */
+  diskImageId?: string
+  diskImageLabel?: string
+  /**
+   * Cluster as a Service only. When `editable`, tenants may change version at launch.
+   * Defaults to locked when omitted.
+   */
+  clusterVersionMode?: CatalogClusterVersionMode
+  /**
+   * Bare metal only. When `editable`, tenants may change instance type at launch.
+   * Defaults to locked when omitted.
+   */
+  hardwareOsMode?: CatalogHardwareOsMode
+  /**
+   * Bare metal only. When `editable`, tenants may change disk image at launch.
+   * Defaults to `hardwareOsMode` when omitted (legacy catalog items).
+   */
+  osImageMode?: CatalogHardwareOsMode
+  /** Cluster default worker node set. */
+  nodeSetId?: string
+  nodeSetLabel?: string
+  /** Cluster default host type for the node set. */
+  hostTypeId?: string
+  hostTypeLabel?: string
+  /**
+   * Cluster as a Service only. When `editable`, tenants may change node set / host type at launch.
+   * Defaults to locked when omitted.
+   */
+  clusterNodeTopologyMode?: CatalogClusterNodeTopologyMode
+  /** Cluster Node topology rows from the publish wizard. */
+  clusterTopology?: Array<{
+    name: string
+    machineTypeId: string
+    nodeCount: number
+  }>
+  /** Locked vs exposed field policies for launch. */
+  fieldPolicies?: CatalogFieldPolicy[]
+}
+
+export function getCatalogItemNetworkPolicy(
+  item: ProviderCatalogDraft,
+): CatalogNetworkPolicy {
+  return resolveCatalogNetworkPolicy(item.networkPolicy)
+}
+
+export function getCatalogItemStatus(item: ProviderCatalogDraft): CatalogItemStatus {
+  return item.status === 'unpublished' ? 'unpublished' : 'live'
+}
+
+function isRateCard(value: unknown): value is RateCard {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const rateCard = value as RateCard
+  return (
+    typeof rateCard.hourlyRate === 'number' &&
+    typeof rateCard.monthlyRate === 'number' &&
+    typeof rateCard.currency === 'string' &&
+    rateCard.billingUnit === 'per-instance'
+  )
+}
+
+function isProviderCatalogDraft(value: unknown): value is ProviderCatalogDraft {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const draft = value as ProviderCatalogDraft
+  return (
+    typeof draft.catalogItemId === 'string' &&
+    typeof draft.templateRefId === 'string' &&
+    typeof draft.templateName === 'string' &&
+    typeof draft.displayName === 'string' &&
+    (draft.scope === 'global-public' || draft.scope === 'vip-enterprise') &&
+    typeof draft.createdAt === 'string' &&
+    isRateCard(draft.rateCard)
+  )
+}
+
+function persistProviderCatalogItems(items: ProviderCatalogDraft[]): void {
+  try {
+    sessionStorage.setItem(PROVIDER_CATALOG_ITEMS_KEY, JSON.stringify(items))
+    if (items[0]) {
+      sessionStorage.setItem(PROVIDER_CATALOG_DRAFT_KEY, JSON.stringify(items[0]))
+    } else {
+      sessionStorage.removeItem(PROVIDER_CATALOG_DRAFT_KEY)
+    }
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+function readLegacyProviderCatalogDraft(): ProviderCatalogDraft | null {
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_CATALOG_DRAFT_KEY)
+    if (!raw) {
+      return null
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!isProviderCatalogDraft(parsed)) {
+      return null
+    }
+
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+const LEGACY_CATALOG_DISPLAY_NAME =
+  'Compute Node · Dell PowerEdge R750 3x · 512 GB DDR4-3200'
+
+const CATALOG_DNS1123_IDENTITY_MIGRATIONS: ReadonlyArray<{
+  matchCatalogItemId?: string
+  matchDisplayName?: string
+  matchTemplateRefId?: string
+  catalogItemId: string
+  displayName: string
+  templateRefId: string
+}> = [
+  {
+    matchCatalogItemId: 'cat_BM_GPU_TRAINING',
+    matchDisplayName: 'Bare Metal - GPU Training Server',
+    matchTemplateRefId: 'bm_dell_r750',
+    catalogItemId: 'cat-bm-gpu-training',
+    displayName: 'bare-metal-gpu-training-server',
+    templateRefId: 'bm-dell-r750',
+  },
+  {
+    matchCatalogItemId: 'cat_BM_AI_INFERENCE',
+    matchDisplayName: 'Bare Metal - Dense GPU Node',
+    matchTemplateRefId: 'bm_hpe_dl380_a100',
+    catalogItemId: 'cat-bm-dense-gpu',
+    displayName: 'bare-metal-dense-gpu-node',
+    templateRefId: 'bm-hpe-dl380-a100',
+  },
+  {
+    matchCatalogItemId: 'cat_BM_AI_INFERENCE',
+    matchDisplayName: 'Bare Metal - AI Inference Host',
+    matchTemplateRefId: 'bm_hpe_dl380_a100',
+    catalogItemId: 'cat-bm-dense-gpu',
+    displayName: 'bare-metal-dense-gpu-node',
+    templateRefId: 'bm-hpe-dl380-a100',
+  },
+  {
+    matchCatalogItemId: 'cat_NODE_SETS_FC430',
+    matchDisplayName: 'Cluster - Node Sets Object',
+    matchTemplateRefId: 'cl_node_sets_fc430',
+    catalogItemId: 'cat-node-sets-fc430',
+    displayName: 'cluster-node-sets-object',
+    templateRefId: 'cl-node-sets-fc430',
+  },
+  {
+    matchCatalogItemId: 'cat_VM_NET_ATTACH',
+    matchDisplayName: 'VM with Configurable Network Attachments',
+    matchTemplateRefId: 'vm_network_attachments',
+    catalogItemId: 'cat-vm-net-attach',
+    displayName: 'vm-configurable-network-attachments',
+    templateRefId: 'vm-network-attachments',
+  },
+]
+
+const NETWORK_RESOURCE_DNS1123_NAME_MIGRATIONS: Record<string, string> = {
+  'Tenant workload VNet': 'tenant-workload',
+  'Shared services VNet': 'shared-services',
+  'Demo workload VNet': 'demo-workload',
+  'Northstar public edge': 'northsummit-public-edge',
+  'Northsummit public edge': 'northsummit-public-edge',
+  'northstar-public-edge': 'northsummit-public-edge',
+  'Standby pool A': 'standby-pool-a',
+}
+
+const DATA_CENTER_DNS1123_MIGRATIONS: Record<string, string> = {
+  'EU-West-1-DC-A': 'eu-west-1-dc-a',
+  'US-East-1-DC-B': 'us-east-1-dc-b',
+}
+
+function migrateDns1123ResourceName(name: string): string {
+  return NETWORK_RESOURCE_DNS1123_NAME_MIGRATIONS[name] ?? name
+}
+
+function migrateDns1123DataCenter(dataCenter: string): string {
+  return DATA_CENTER_DNS1123_MIGRATIONS[dataCenter] ?? dataCenter
+}
+
+function migrateCatalogItemDns1123Identity(item: ProviderCatalogDraft): ProviderCatalogDraft {
+  const migration = CATALOG_DNS1123_IDENTITY_MIGRATIONS.find(
+    (entry) =>
+      item.catalogItemId === entry.matchCatalogItemId ||
+      item.displayName === entry.matchDisplayName,
+  )
+
+  let next = item
+  if (migration) {
+    next = {
+      ...next,
+      catalogItemId: migration.catalogItemId,
+      displayName: migration.displayName,
+      templateRefId: migration.templateRefId,
+    }
+  } else if (item.displayName === LEGACY_CATALOG_DISPLAY_NAME) {
+    next = { ...next, displayName: DEFAULT_CATALOG_ITEM_DISPLAY_NAME }
+  }
+
+  if (next.templateRefId === 'bm_dell_r750') {
+    next = { ...next, templateRefId: 'bm-dell-r750' }
+  } else if (next.templateRefId === 'bm_hpe_dl380_a100') {
+    next = { ...next, templateRefId: 'bm-hpe-dl380-a100' }
+  } else if (next.templateRefId === 'cl_node_sets_fc430') {
+    next = { ...next, templateRefId: 'cl-node-sets-fc430' }
+  } else if (next.templateRefId === 'vm_network_attachments') {
+    next = { ...next, templateRefId: 'vm-network-attachments' }
+  }
+
+  if (next.networkPolicy) {
+    const policy = normalizeCatalogNetworkPolicy(next.networkPolicy)
+    const virtualNetworkName = migrateDns1123ResourceName(policy.virtualNetwork.name)
+    const subnetName = migrateDns1123ResourceName(policy.subnet.name)
+    const securityGroupName = migrateDns1123ResourceName(policy.securityGroup.name)
+    if (
+      virtualNetworkName !== policy.virtualNetwork.name ||
+      subnetName !== policy.subnet.name ||
+      securityGroupName !== policy.securityGroup.name
+    ) {
+      next = {
+        ...next,
+        networkPolicy: {
+          ...policy,
+          virtualNetwork: { ...policy.virtualNetwork, name: virtualNetworkName },
+          subnet: { ...policy.subnet, name: subnetName },
+          securityGroup: { ...policy.securityGroup, name: securityGroupName },
+        },
+      }
+    }
+  }
+
+  return next
+}
+
+function catalogItemIdentityChanged(
+  before: ProviderCatalogDraft,
+  after: ProviderCatalogDraft,
+): boolean {
+  return (
+    before.catalogItemId !== after.catalogItemId ||
+    before.displayName !== after.displayName ||
+    before.templateRefId !== after.templateRefId ||
+    JSON.stringify(before.networkPolicy) !== JSON.stringify(after.networkPolicy)
+  )
+}
+
+function dedupeProviderCatalogItems(items: ProviderCatalogDraft[]): ProviderCatalogDraft[] {
+  const byId = new Map<string, ProviderCatalogDraft>()
+
+  for (const item of items) {
+    const existing = byId.get(item.catalogItemId)
+    if (!existing) {
+      byId.set(item.catalogItemId, item)
+      continue
+    }
+
+    const existingLive = existing.status !== 'unpublished'
+    const nextLive = item.status !== 'unpublished'
+
+    // Prefer the live row when duplicates share an id.
+    if (!existingLive && nextLive) {
+      byId.set(item.catalogItemId, item)
+      continue
+    }
+    if (existingLive && !nextLive) {
+      continue
+    }
+
+    // Same publish state: keep the newer row.
+    if ((item.createdAt ?? '') >= (existing.createdAt ?? '')) {
+      byId.set(item.catalogItemId, item)
+    }
+  }
+
+  return Array.from(byId.values())
+}
+
+export function getProviderCatalogItems(): ProviderCatalogDraft[] {
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_CATALOG_ITEMS_KEY)
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        const items = parsed.filter(isProviderCatalogDraft)
+        const migrated = items.map(migrateCatalogItemDns1123Identity)
+        const deduped = dedupeProviderCatalogItems(migrated)
+        const identityChanged = migrated.some((item, index) =>
+          catalogItemIdentityChanged(items[index]!, item),
+        )
+        const duplicatesRemoved = deduped.length !== migrated.length
+
+        if (identityChanged || duplicatesRemoved) {
+          persistProviderCatalogItems(deduped)
+
+          try {
+            const organizations = getProviderRegisteredOrganizations()
+            const idRemap = new Map(
+              migrated
+                .map((item, index) => [items[index]!.catalogItemId, item.catalogItemId] as const)
+                .filter(([from, to]) => from !== to),
+            )
+            if (idRemap.size > 0 || organizations.some((org) =>
+              deduped.some(
+                (item) =>
+                  org.catalogItemId === item.catalogItemId &&
+                  org.catalogDisplayName !== item.displayName,
+              ),
+            )) {
+              setProviderRegisteredOrganizations(
+                organizations.map((org) => {
+                  const remappedId = org.catalogItemId
+                    ? idRemap.get(org.catalogItemId) ?? org.catalogItemId
+                    : null
+                  const catalog = deduped.find((item) => item.catalogItemId === remappedId)
+                  if (!catalog) {
+                    return org.catalogItemId && idRemap.has(org.catalogItemId)
+                      ? {
+                          ...org,
+                          catalogItemId: remappedId,
+                          catalogDisplayName: org.catalogDisplayName,
+                        }
+                      : org
+                  }
+                  return {
+                    ...org,
+                    catalogItemId: catalog.catalogItemId,
+                    catalogDisplayName: catalog.displayName,
+                  }
+                }),
+              )
+            }
+          } catch {
+            /* demo storage unavailable */
+          }
+        }
+        return deduped
+      }
+    }
+  } catch {
+    /* demo storage unavailable */
+  }
+
+  const legacyDraft = readLegacyProviderCatalogDraft()
+  if (!legacyDraft) {
+    return []
+  }
+
+  const migrated = migrateCatalogItemDns1123Identity(legacyDraft)
+  persistProviderCatalogItems([migrated])
+  return [migrated]
+}
+
+export function addProviderCatalogItem(item: ProviderCatalogDraft): void {
+  const existing = getProviderCatalogItems().filter(
+    (catalogItem) => catalogItem.catalogItemId !== item.catalogItemId,
+  )
+  persistProviderCatalogItems([item, ...existing])
+}
+
+function formatDuplicatedCatalogDisplayName(displayName: string): string {
+  const trimmed = displayName.trim().toLowerCase()
+  if (!trimmed) {
+    return 'catalog-item-copy'
+  }
+
+  if (/-copy(?:-\d+)?$/.test(trimmed)) {
+    const match = trimmed.match(/^(.*?)-copy(?:-(\d+))?$/)
+    const base = match?.[1] ?? trimmed
+    const next = Number.parseInt(match?.[2] ?? '1', 10) + 1
+    return `${base}-copy-${next}`
+  }
+
+  return `${trimmed}-copy`
+}
+
+/** Clone a catalog item as an unpublished draft. Does not copy organization assignments. */
+export function duplicateProviderCatalogItem(catalogItemId: string): ProviderCatalogDraft | null {
+  const source = getProviderCatalogItems().find((item) => item.catalogItemId === catalogItemId)
+  if (!source) {
+    return null
+  }
+
+  const duplicate: ProviderCatalogDraft = {
+    catalogItemId: generateCatalogItemId(),
+    templateRefId: source.templateRefId,
+    templateName: source.templateName,
+    displayName: formatDuplicatedCatalogDisplayName(source.displayName),
+    description: source.description,
+    scope: source.scope,
+    rateCard: { ...source.rateCard },
+    serviceId: source.serviceId,
+    networkPolicy: getCatalogItemNetworkPolicy(source),
+    status: 'unpublished',
+    createdAt: new Date().toISOString(),
+    ...(source.enterpriseTenantId ? { enterpriseTenantId: source.enterpriseTenantId } : {}),
+    ...(source.enterpriseTenantIds?.length
+      ? { enterpriseTenantIds: [...source.enterpriseTenantIds] }
+      : {}),
+    ...(source.instanceTypeId ? { instanceTypeId: source.instanceTypeId } : {}),
+    ...(source.instanceTypeLabel ? { instanceTypeLabel: source.instanceTypeLabel } : {}),
+    ...(source.diskImageId ? { diskImageId: source.diskImageId } : {}),
+    ...(source.diskImageLabel ? { diskImageLabel: source.diskImageLabel } : {}),
+    ...(source.clusterVersionMode ? { clusterVersionMode: source.clusterVersionMode } : {}),
+    ...(source.hardwareOsMode ? { hardwareOsMode: source.hardwareOsMode } : {}),
+    ...(source.osImageMode ? { osImageMode: source.osImageMode } : {}),
+    ...(source.nodeSetId ? { nodeSetId: source.nodeSetId } : {}),
+    ...(source.nodeSetLabel ? { nodeSetLabel: source.nodeSetLabel } : {}),
+    ...(source.hostTypeId ? { hostTypeId: source.hostTypeId } : {}),
+    ...(source.hostTypeLabel ? { hostTypeLabel: source.hostTypeLabel } : {}),
+    ...(source.clusterNodeTopologyMode
+      ? { clusterNodeTopologyMode: source.clusterNodeTopologyMode }
+      : {}),
+    ...(source.clusterTopology?.length
+      ? {
+          clusterTopology: source.clusterTopology.map((row) => ({ ...row })),
+        }
+      : {}),
+    ...(source.fieldPolicies?.length
+      ? { fieldPolicies: source.fieldPolicies.map((policy) => ({ ...policy })) }
+      : {}),
+  }
+
+  addProviderCatalogItem(duplicate)
+  return duplicate
+}
+
+/** Latest catalog item — kept for tenant/org flows that still expect a single draft. */
+export function getProviderCatalogDraft(): ProviderCatalogDraft | null {
+  return getProviderCatalogItems()[0] ?? null
+}
+
+export function setProviderCatalogDraft(draft: ProviderCatalogDraft): void {
+  const items = getProviderCatalogItems()
+  if (items.length === 0) {
+    persistProviderCatalogItems([draft])
+    return
+  }
+
+  const index = items.findIndex((item) => item.catalogItemId === draft.catalogItemId)
+  if (index >= 0) {
+    const next = [...items]
+    next[index] = draft
+    persistProviderCatalogItems(next)
+    return
+  }
+
+  persistProviderCatalogItems([draft, ...items])
+}
+
+export type CatalogItemEditableFields = {
+  displayName: string
+  description: string
+  scope: PublishCatalogScope
+  enterpriseTenantId?: string
+  enterpriseTenantIds?: string[]
+}
+
+/** Updates mutable commercial fields; service, template, and rate stay locked. */
+export function updateProviderCatalogItem(
+  catalogItemId: string,
+  fields: CatalogItemEditableFields,
+): ProviderCatalogDraft | null {
+  const items = getProviderCatalogItems()
+  const index = items.findIndex((item) => item.catalogItemId === catalogItemId)
+  if (index < 0) {
+    return null
+  }
+
+  const current = items[index]!
+  const updated: ProviderCatalogDraft = {
+    ...current,
+    displayName: fields.displayName.trim(),
+    description: fields.description.trim(),
+    scope: fields.scope,
+  }
+
+  const enterpriseTenantIds = [
+    ...new Set(
+      (fields.enterpriseTenantIds?.length
+        ? fields.enterpriseTenantIds
+        : fields.enterpriseTenantId
+          ? [fields.enterpriseTenantId]
+          : []
+      )
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ]
+
+  if (fields.scope === 'vip-enterprise' && enterpriseTenantIds.length > 0) {
+    updated.enterpriseTenantId = enterpriseTenantIds[0]
+    updated.enterpriseTenantIds = enterpriseTenantIds
+  } else {
+    delete updated.enterpriseTenantId
+    delete updated.enterpriseTenantIds
+  }
+
+  const next = [...items]
+  next[index] = updated
+  persistProviderCatalogItems(next)
+
+  try {
+    const organizations = getProviderRegisteredOrganizations()
+    const hasAssigned = organizations.some((org) => org.catalogItemId === catalogItemId)
+    if (hasAssigned) {
+      setProviderRegisteredOrganizations(
+        organizations.map((org) =>
+          org.catalogItemId === catalogItemId
+            ? { ...org, catalogDisplayName: updated.displayName }
+            : org,
+        ),
+      )
+    }
+  } catch {
+    /* demo storage unavailable */
+  }
+
+  return updated
+}
+
+/** Applies a full publish wizard payload to an existing catalog item. */
+export function updateProviderCatalogItemFromPayload(
+  catalogItemId: string,
+  payload: PublishedTemplatePayload,
+): ProviderCatalogDraft | null {
+  const items = getProviderCatalogItems()
+  const index = items.findIndex((item) => item.catalogItemId === catalogItemId)
+  if (index < 0) {
+    return null
+  }
+
+  const current = items[index]!
+  const enterpriseTenantIds = [
+    ...new Set(
+      (payload.enterpriseTenantIds?.length
+        ? payload.enterpriseTenantIds
+        : payload.enterpriseTenantId
+          ? [payload.enterpriseTenantId]
+          : []
+      )
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ]
+
+  const updated: ProviderCatalogDraft = {
+    ...current,
+    templateRefId: payload.templateRefId,
+    templateName: payload.templateName,
+    displayName: payload.displayName.trim(),
+    description: payload.description.trim(),
+    scope: payload.scope,
+    rateCard: payload.rateCard,
+    serviceId: payload.serviceId,
+    networkPolicy: payload.networkPolicy
+      ? normalizeCatalogNetworkPolicy(payload.networkPolicy)
+      : current.networkPolicy,
+    ...(payload.instanceTypeId ? { instanceTypeId: payload.instanceTypeId } : {}),
+    ...(payload.instanceTypeLabel ? { instanceTypeLabel: payload.instanceTypeLabel } : {}),
+    ...(payload.diskImageId ? { diskImageId: payload.diskImageId } : {}),
+    ...(payload.diskImageLabel ? { diskImageLabel: payload.diskImageLabel } : {}),
+    ...(payload.clusterVersionMode
+      ? { clusterVersionMode: payload.clusterVersionMode }
+      : {}),
+    ...(payload.hardwareOsMode ? { hardwareOsMode: payload.hardwareOsMode } : {}),
+    ...(payload.osImageMode ? { osImageMode: payload.osImageMode } : {}),
+    ...(payload.nodeSetId ? { nodeSetId: payload.nodeSetId } : {}),
+    ...(payload.nodeSetLabel ? { nodeSetLabel: payload.nodeSetLabel } : {}),
+    ...(payload.hostTypeId ? { hostTypeId: payload.hostTypeId } : {}),
+    ...(payload.hostTypeLabel ? { hostTypeLabel: payload.hostTypeLabel } : {}),
+    ...(payload.clusterNodeTopologyMode
+      ? { clusterNodeTopologyMode: payload.clusterNodeTopologyMode }
+      : {}),
+    ...(payload.clusterTopology?.length
+      ? {
+          clusterTopology: payload.clusterTopology.map((row) => ({ ...row })),
+        }
+      : {}),
+    ...(payload.fieldPolicies?.length ? { fieldPolicies: payload.fieldPolicies } : {}),
+  }
+
+  if (payload.scope === 'vip-enterprise' && enterpriseTenantIds.length > 0) {
+    updated.enterpriseTenantId = enterpriseTenantIds[0]
+    updated.enterpriseTenantIds = enterpriseTenantIds
+  } else {
+    delete updated.enterpriseTenantId
+    delete updated.enterpriseTenantIds
+  }
+
+  const next = [...items]
+  next[index] = updated
+  persistProviderCatalogItems(next)
+
+  try {
+    const organizations = getProviderRegisteredOrganizations()
+    const hasAssigned = organizations.some((org) => org.catalogItemId === catalogItemId)
+    if (hasAssigned) {
+      setProviderRegisteredOrganizations(
+        organizations.map((org) =>
+          org.catalogItemId === catalogItemId
+            ? { ...org, catalogDisplayName: updated.displayName }
+            : org,
+        ),
+      )
+    }
+
+    const vipOrganizationIds =
+      payload.vipOrganizationIds?.length
+        ? payload.vipOrganizationIds
+        : payload.vipOrganizationId
+          ? [payload.vipOrganizationId]
+          : []
+
+    for (const organizationId of vipOrganizationIds) {
+      assignCatalogToRegisteredOrganization(organizationId, updated)
+    }
+  } catch {
+    /* demo storage unavailable */
+  }
+
+  return updated
+}
+
+export function updateProviderCatalogNetworkPolicy(
+  catalogItemId: string,
+  networkPolicy: CatalogNetworkPolicy,
+): ProviderCatalogDraft | null {
+  const items = getProviderCatalogItems()
+  const index = items.findIndex((item) => item.catalogItemId === catalogItemId)
+  if (index < 0) {
+    return null
+  }
+
+  const updated: ProviderCatalogDraft = {
+    ...items[index]!,
+    networkPolicy: normalizeCatalogNetworkPolicy(networkPolicy),
+  }
+  const next = [...items]
+  next[index] = updated
+  persistProviderCatalogItems(next)
+  return updated
+}
+
+export function setProviderCatalogItemStatus(
+  catalogItemId: string,
+  status: CatalogItemStatus,
+): ProviderCatalogDraft | null {
+  const items = getProviderCatalogItems()
+  const index = items.findIndex((item) => item.catalogItemId === catalogItemId)
+  if (index < 0) {
+    return null
+  }
+
+  const updated: ProviderCatalogDraft = {
+    ...items[index]!,
+    status,
+  }
+  const next = [...items]
+  next[index] = updated
+  persistProviderCatalogItems(next)
+  return updated
+}
+
+/** Demo/sync helper for non-edit-modal catalog fields (e.g. cluster version). */
+export function patchProviderCatalogItem(
+  catalogItemId: string,
+  patch: Partial<
+    Pick<
+      ProviderCatalogDraft,
+      | 'description'
+      | 'instanceTypeId'
+      | 'instanceTypeLabel'
+      | 'diskImageId'
+      | 'diskImageLabel'
+      | 'nodeSetId'
+      | 'nodeSetLabel'
+      | 'hostTypeId'
+      | 'hostTypeLabel'
+      | 'clusterNodeTopologyMode'
+      | 'clusterTopology'
+      | 'hardwareOsMode'
+      | 'osImageMode'
+      | 'rateCard'
+    >
+  >,
+): ProviderCatalogDraft | null {
+  const items = getProviderCatalogItems()
+  const index = items.findIndex((item) => item.catalogItemId === catalogItemId)
+  if (index < 0) {
+    return null
+  }
+
+  const updated: ProviderCatalogDraft = {
+    ...items[index]!,
+    ...patch,
+  }
+  const next = [...items]
+  next[index] = updated
+  persistProviderCatalogItems(next)
+  return updated
+}
+
+/**
+ * Rewrite a catalog item's stable identity (id / template ref / display name) and
+ * retarget tenant assignments. Used when migrating demo seeds to DNS-1123 names.
+ */
+export function rewriteProviderCatalogItemIdentity(
+  fromCatalogItemId: string,
+  identity: {
+    catalogItemId: string
+    templateRefId?: string
+    templateName?: string
+    displayName?: string
+    description?: string
+    scope?: PublishCatalogScope
+    enterpriseTenantId?: string | null
+  },
+): ProviderCatalogDraft | null {
+  const items = getProviderCatalogItems()
+  const index = items.findIndex((item) => item.catalogItemId === fromCatalogItemId)
+  if (index < 0) {
+    return null
+  }
+
+  const current = items[index]!
+  const updated: ProviderCatalogDraft = {
+    ...current,
+    catalogItemId: identity.catalogItemId,
+    ...(identity.templateRefId ? { templateRefId: identity.templateRefId } : {}),
+    ...(identity.templateName ? { templateName: identity.templateName } : {}),
+    ...(identity.displayName ? { displayName: identity.displayName } : {}),
+    ...(identity.description !== undefined ? { description: identity.description } : {}),
+  }
+
+  if (identity.scope) {
+    updated.scope = identity.scope
+  }
+
+  if (identity.enterpriseTenantId === null) {
+    delete updated.enterpriseTenantId
+    delete updated.enterpriseTenantIds
+  } else if (identity.enterpriseTenantId) {
+    updated.enterpriseTenantId = identity.enterpriseTenantId
+    updated.enterpriseTenantIds = [identity.enterpriseTenantId]
+  }
+
+  const next = [...items]
+  next[index] = updated
+  persistProviderCatalogItems(next)
+
+  try {
+    const tenants = getProviderRegisteredOrganizations()
+    if (tenants.some((org) => org.catalogItemId === fromCatalogItemId)) {
+      setProviderRegisteredOrganizations(
+        tenants.map((org) =>
+          org.catalogItemId === fromCatalogItemId
+            ? {
+                ...org,
+                catalogItemId: updated.catalogItemId,
+                catalogDisplayName: updated.displayName,
+              }
+            : org,
+        ),
+      )
+    }
+  } catch {
+    /* demo storage unavailable */
+  }
+
+  return updated
+}
+
+export function deleteProviderCatalogItem(catalogItemId: string): boolean {
+  const items = getProviderCatalogItems()
+  const next = items.filter((item) => item.catalogItemId !== catalogItemId)
+  if (next.length === items.length) {
+    return false
+  }
+
+  persistProviderCatalogItems(next)
+
+  try {
+    const tenants = getProviderRegisteredOrganizations()
+    const hasAssigned = tenants.some((org) => org.catalogItemId === catalogItemId)
+    if (hasAssigned) {
+      setProviderRegisteredOrganizations(
+        tenants.map((org) =>
+          org.catalogItemId === catalogItemId
+            ? { ...org, catalogItemId: null, catalogDisplayName: null }
+            : org,
+        ),
+      )
+    }
+  } catch {
+    /* demo storage unavailable */
+  }
+
+  return true
+}
+
+export function clearProviderCatalogDraft(): void {
+  try {
+    sessionStorage.removeItem(PROVIDER_CATALOG_DRAFT_KEY)
+    sessionStorage.removeItem(PROVIDER_CATALOG_ITEMS_KEY)
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+function isSavedMasterTemplate(value: unknown): value is SavedMasterTemplate {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const template = value as SavedMasterTemplate
+  return (
+    typeof template.templateRefId === 'string' &&
+    typeof template.templateName === 'string' &&
+    typeof template.description === 'string' &&
+    typeof template.hardwareProfileId === 'string' &&
+    typeof template.osImageId === 'string' &&
+    typeof template.suggestedDisplayName === 'string'
+  )
+}
+
+function normalizeSavedMasterTemplate(template: SavedMasterTemplate): SavedMasterTemplate {
+  const templateRefId =
+    template.templateRefId === 'bm_dell_r750'
+      ? 'bm-dell-r750'
+      : template.templateRefId === 'bm_hpe_dl380_a100'
+        ? 'bm-hpe-dl380-a100'
+        : template.templateRefId
+
+  return {
+    ...template,
+    templateRefId,
+    suggestedDisplayName:
+      template.suggestedDisplayName === LEGACY_CATALOG_DISPLAY_NAME ||
+      template.suggestedDisplayName === 'Bare Metal - GPU Training Server'
+        ? DEFAULT_CATALOG_ITEM_DISPLAY_NAME
+        : template.suggestedDisplayName === 'Bare Metal - Dense GPU Node' ||
+            template.suggestedDisplayName === 'Bare Metal - AI Inference Host'
+          ? 'bare-metal-dense-gpu-node'
+          : template.suggestedDisplayName,
+    rateCard: isRateCard(template.rateCard) ? template.rateCard : DEFAULT_RATE_CARD,
+  }
+}
+
+function persistProviderSavedTemplates(templates: SavedMasterTemplate[]): void {
+  try {
+    sessionStorage.setItem(PROVIDER_SAVED_TEMPLATES_KEY, JSON.stringify(templates))
+    if (templates[0]) {
+      sessionStorage.setItem(PROVIDER_SAVED_TEMPLATE_KEY, JSON.stringify(templates[0]))
+    } else {
+      sessionStorage.removeItem(PROVIDER_SAVED_TEMPLATE_KEY)
+    }
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function getProviderSavedTemplates(): SavedMasterTemplate[] {
+  try {
+    const rawTemplates = sessionStorage.getItem(PROVIDER_SAVED_TEMPLATES_KEY)
+    if (rawTemplates) {
+      const parsed: unknown = JSON.parse(rawTemplates)
+      if (Array.isArray(parsed)) {
+        return parsed.filter(isSavedMasterTemplate).map(normalizeSavedMasterTemplate)
+      }
+    }
+
+    const legacyTemplate = getProviderSavedTemplate()
+    return legacyTemplate ? [legacyTemplate] : []
+  } catch {
+    return []
+  }
+}
+
+export function getProviderSavedTemplate(): SavedMasterTemplate | null {
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_SAVED_TEMPLATE_KEY)
+    if (!raw) {
+      return null
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!isSavedMasterTemplate(parsed)) {
+      return null
+    }
+
+    return normalizeSavedMasterTemplate(parsed)
+  } catch {
+    return null
+  }
+}
+
+export function setProviderSavedTemplate(template: SavedMasterTemplate): void {
+  const normalized = normalizeSavedMasterTemplate(template)
+  const templates = getProviderSavedTemplates()
+
+  if (templates.length === 0) {
+    persistProviderSavedTemplates([normalized])
+    return
+  }
+
+  persistProviderSavedTemplates([normalized, ...templates.slice(1)])
+}
+
+export function addProviderSavedTemplate(template: SavedMasterTemplate): void {
+  const normalized = normalizeSavedMasterTemplate(template)
+  const templates = getProviderSavedTemplates()
+
+  if (templates.some((entry) => entry.templateRefId === normalized.templateRefId)) {
+    return
+  }
+
+  persistProviderSavedTemplates([...templates, normalized])
+}
+
+export function upsertProviderSavedTemplate(template: SavedMasterTemplate): void {
+  const normalized = normalizeSavedMasterTemplate(template)
+  const templates = getProviderSavedTemplates()
+  const index = templates.findIndex((entry) => entry.templateRefId === normalized.templateRefId)
+
+  if (index === -1) {
+    persistProviderSavedTemplates([...templates, normalized])
+    return
+  }
+
+  const next = [...templates]
+  next[index] = normalized
+  persistProviderSavedTemplates(next)
+}
+
+/** Keep catalog “Linked template” labels in sync when a master template is renamed. */
+export function syncCatalogLinkedTemplateName(template: SavedMasterTemplate): void {
+  const items = getProviderCatalogItems()
+  let changed = false
+
+  const next = items.map((item) => {
+    if (item.templateRefId !== template.templateRefId || item.templateName === template.templateName) {
+      return item
+    }
+
+    changed = true
+    return { ...item, templateName: template.templateName }
+  })
+
+  if (changed) {
+    persistProviderCatalogItems(next)
+  }
+}
+
+export function clearProviderSavedTemplate(): void {
+  try {
+    sessionStorage.removeItem(PROVIDER_SAVED_TEMPLATE_KEY)
+    sessionStorage.removeItem(PROVIDER_SAVED_TEMPLATES_KEY)
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+function migrateNorthsummitIssuerUrl(issuerUrl: string): string {
+  return issuerUrl
+    .replace(/bluesolacefinancial\.com/gi, DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN)
+    .replace(/northsummitbank\.com/gi, DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN)
+}
+
+function normalizeRegisteredOrganization(org: RegisteredOrganization): RegisteredOrganization {
+  const emailDomain = org.tenantAdminEmail.includes('@')
+    ? org.tenantAdminEmail.split('@')[1]?.toLowerCase() ?? ''
+    : ''
+  const isNorthsummit =
+    org.slug === 'northstar' ||
+    org.slug === 'northsummit' ||
+    org.id === 'org-northstar-bank' ||
+    org.id === 'org_northstar_bank' ||
+    org.id === 'org-northsummit-bank' ||
+    org.id === 'org_northsummit_bank'
+  const rawPrimaryDomain =
+    typeof org.primaryDomain === 'string' && org.primaryDomain.trim()
+      ? org.primaryDomain.trim().toLowerCase()
+      : emailDomain
+  const primaryDomain =
+    isNorthsummit &&
+    (rawPrimaryDomain === DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN ||
+      rawPrimaryDomain === DEMO_BLUESOLACE_PRIMARY_DOMAIN ||
+      !rawPrimaryDomain)
+      ? DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN
+      : rawPrimaryDomain
+  const additionalDomains = normalizeAdditionalDomains(
+    (Array.isArray(org.additionalDomains) ? org.additionalDomains : []).map((domain) =>
+      isNorthsummit &&
+      (domain === DEMO_NORTH_SUMMIT_BANK_ADDITIONAL_DOMAIN ||
+        domain === `subsidiary.${DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN}` ||
+        domain === DEMO_BLUESOLACE_ADDITIONAL_DOMAIN ||
+        domain === `subsidiary.${DEMO_BLUESOLACE_PRIMARY_DOMAIN}`)
+        ? DEMO_NORTH_SUMMIT_BANK_ADDITIONAL_DOMAIN
+        : domain,
+    ),
+    primaryDomain,
+  )
+  const identityProviderDisplayName =
+    isNorthsummit &&
+    (org.identityProviderDisplayName === 'North Summit Bank IdP' ||
+      org.identityProviderDisplayName === 'Northstar Bank IdP' ||
+      org.identityProviderDisplayName === 'Northsummit Bank IdP' ||
+      org.identityProviderDisplayName === DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME ||
+      org.identityProviderDisplayName === DEMO_BLUESOLACE_IDP_DISPLAY_NAME)
+      ? DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME
+      : org.identityProviderDisplayName === 'North Summit Bank IdP' ||
+          org.identityProviderDisplayName === 'Northstar Bank IdP' ||
+          org.identityProviderDisplayName === 'Northsummit Bank IdP'
+        ? DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME
+        : typeof org.identityProviderDisplayName === 'string' &&
+            org.identityProviderDisplayName.trim()
+          ? org.identityProviderDisplayName.trim()
+          : null
+  const identityProviderIssuerUrl =
+    typeof org.identityProviderIssuerUrl === 'string' && org.identityProviderIssuerUrl.trim()
+      ? isNorthsummit
+        ? migrateNorthsummitIssuerUrl(org.identityProviderIssuerUrl.trim())
+        : org.identityProviderIssuerUrl.trim()
+      : null
+  const identityProviderName =
+    typeof org.identityProviderName === 'string' && org.identityProviderName.trim()
+      ? isNorthsummit
+        ? migrateNorthsummitIssuerUrl(org.identityProviderName.trim())
+        : org.identityProviderName.trim()
+      : null
+  const identityProviderClientId =
+    typeof org.identityProviderClientId === 'string' && org.identityProviderClientId.trim()
+      ? isNorthsummit &&
+        (org.identityProviderClientId.trim() === DEMO_BLUESOLACE_IDP_CLIENT_ID ||
+          org.identityProviderClientId.trim() === 'bmaas-northstar' ||
+          org.identityProviderClientId.trim() === 'bmaas-northsummit' ||
+          org.identityProviderClientId.trim() === DEMO_NORTH_SUMMIT_BANK_IDP_CLIENT_ID)
+        ? DEMO_NORTH_SUMMIT_BANK_IDP_CLIENT_ID
+        : migrateLegacyIdentityProviderClientId(org.identityProviderClientId.trim())
+      : null
+  const identityProviders = hydrateIdentityProvidersFromOrganizationFields({
+    id: org.id,
+    primaryDomain,
+    identityProviderConnected: Boolean(org.identityProviderConnected),
+    identityProviderName,
+    identityProviderDisplayName,
+    identityProviderProtocol:
+      org.identityProviderProtocol === 'OIDC' || org.identityProviderProtocol === 'SAML'
+        ? org.identityProviderProtocol
+        : null,
+    identityProviderIssuerUrl,
+    identityProviderClientId,
+    identityProviders: normalizeOrganizationIdentityProviders(org.identityProviders).map(
+      (provider) =>
+        isNorthsummit
+          ? {
+              ...provider,
+              displayName:
+                provider.displayName === DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME ||
+                provider.displayName === DEMO_BLUESOLACE_IDP_DISPLAY_NAME ||
+                provider.displayName === 'North Summit Bank IdP' ||
+                provider.displayName === 'Northstar Bank IdP' ||
+                provider.displayName === 'Northsummit Bank IdP'
+                  ? DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME
+                  : provider.displayName,
+              issuerUrl: migrateNorthsummitIssuerUrl(provider.issuerUrl),
+              clientId:
+                provider.clientId === DEMO_BLUESOLACE_IDP_CLIENT_ID ||
+                provider.clientId === 'bmaas-northstar' ||
+                provider.clientId === 'bmaas-northsummit'
+                  ? DEMO_NORTH_SUMMIT_BANK_IDP_CLIENT_ID
+                  : migrateLegacyIdentityProviderClientId(provider.clientId),
+              name: migrateNorthsummitIssuerUrl(provider.name),
+            }
+          : provider,
+    ),
+  })
+  const billingAccountName =
+    isNorthsummit &&
+    (org.billingAccountName === 'North Summit Bank — Enterprise Billing' ||
+      org.billingAccountName === 'Northstar Bank — Enterprise Billing' ||
+      org.billingAccountName === 'Northsummit Bank — Enterprise Billing' ||
+      org.billingAccountName === DEMO_NORTH_SUMMIT_BANK_BILLING_ACCOUNT_NAME ||
+      org.billingAccountName === DEMO_BLUESOLACE_BILLING_ACCOUNT_NAME)
+      ? DEMO_NORTH_SUMMIT_BANK_BILLING_ACCOUNT_NAME
+      : org.billingAccountName === 'North Summit Bank — Enterprise Billing' ||
+          org.billingAccountName === 'Northstar Bank — Enterprise Billing' ||
+          org.billingAccountName === 'Northsummit Bank — Enterprise Billing'
+        ? DEMO_NORTH_SUMMIT_BANK_BILLING_ACCOUNT_NAME
+        : org.billingAccountName === 'BlueSolace Financial Group — Enterprise Billing' ||
+            org.billingAccountName === 'Bluestone Financial Group — Corporate'
+          ? org.billingAccountName.includes('Corporate')
+            ? 'bluestone-financial-group-corporate'
+            : DEMO_BLUESOLACE_BILLING_ACCOUNT_NAME
+          : org.billingAccountName === 'Harborline Capital — Enterprise Billing'
+            ? 'harborline-capital-enterprise-billing'
+            : org.billingAccountName === 'Silverpine Trust — Enterprise Billing'
+              ? 'silverpine-trust-enterprise-billing'
+              : org.billingAccountName === 'Redwood Mutual — Enterprise Billing'
+                ? 'redwood-mutual-enterprise-billing'
+                : org.billingAccountName
+  const placeholderTenantAdminEmail =
+    DEFAULT_REGISTER_ORGANIZATION_TENANT_ADMIN.email.toLowerCase()
+  const shouldClearPlaceholderTenantAdmin =
+    !isNorthsummit && org.tenantAdminEmail.trim().toLowerCase() === placeholderTenantAdminEmail
+
+  const breakGlassEmail =
+    typeof org.breakGlassEmail === 'string' && org.breakGlassEmail.trim()
+      ? isNorthsummit
+        ? org.breakGlassEmail
+            .trim()
+            .toLowerCase()
+            .replace(/bluesolacefinancial\.com$/i, DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN)
+            .replace(/northsummitbank\.com$/i, DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN)
+        : org.breakGlassEmail.trim().toLowerCase()
+      : null
+
+  const normalized: RegisteredOrganization = {
+    ...org,
+    id:
+      org.id === 'org_northstar_bank' ||
+      org.id === 'org-northstar-bank' ||
+      org.id === 'org_northsummit_bank'
+        ? DEMO_NORTH_SUMMIT_BANK_ORG_ID
+        : org.id,
+    slug: isNorthsummit ? 'northsummit' : org.slug,
+    name:
+      isNorthsummit ||
+      org.slug === 'northstar' ||
+      org.slug === 'northsummit'
+        ? DEMO_NORTH_SUMMIT_BANK_ORG_NAME
+        : org.name === 'North Summit Bank' ||
+            org.name === 'Northstar Bank' ||
+            org.name === 'Northsummit Bank'
+          ? DEMO_NORTH_SUMMIT_BANK_ORG_NAME
+          : org.name === 'BlueSolace Financial Group' ||
+              org.name === 'Bluestone Financial Group'
+            ? 'bluesolace-financial-group'
+            : org.name === 'Harborline Capital'
+              ? 'harborline-capital'
+              : org.name === 'Silverpine Trust'
+                ? 'silverpine-trust'
+                : org.name === 'Redwood Mutual'
+                  ? 'redwood-mutual'
+                  : org.name === 'Cedar Ridge Credit'
+                    ? 'cedar-ridge-credit'
+                    : org.name,
+    primaryDomain,
+    additionalDomains,
+    catalogItemId:
+      org.catalogItemId === 'cat_BM_GPU_TRAINING'
+        ? 'cat-bm-gpu-training'
+        : org.catalogItemId === 'cat_BM_AI_INFERENCE'
+          ? 'cat-bm-dense-gpu'
+          : org.catalogItemId === 'cat_NODE_SETS_FC430'
+            ? 'cat-node-sets-fc430'
+            : org.catalogItemId === 'cat_VM_NET_ATTACH'
+              ? 'cat-vm-net-attach'
+              : (org.catalogItemId ?? null),
+    catalogDisplayName:
+      org.catalogDisplayName === 'Bare Metal - GPU Training Server'
+        ? 'bare-metal-gpu-training-server'
+        : org.catalogDisplayName === 'Bare Metal - Dense GPU Node' ||
+            org.catalogDisplayName === 'Bare Metal - AI Inference Host'
+          ? 'bare-metal-dense-gpu-node'
+          : org.catalogDisplayName === 'Cluster - Node Sets Object'
+            ? 'cluster-node-sets-object'
+            : org.catalogDisplayName === 'VM with Configurable Network Attachments'
+              ? 'vm-configurable-network-attachments'
+              : (org.catalogDisplayName ?? null),
+    externalIpPoolId:
+      org.externalIpPoolId === 'eipool-northstar-edge'
+        ? 'eipool-northsummit-edge'
+        : (org.externalIpPoolId ?? null),
+    externalIpPoolName: org.externalIpPoolName
+      ? migrateDns1123ResourceName(org.externalIpPoolName)
+      : null,
+    externalIpPoolCidr: org.externalIpPoolCidr ?? null,
+    billingAccountName,
+    logoSrc: normalizeDemoCompanyLogoSrc(
+      typeof org.logoSrc === 'string' && org.logoSrc.trim() ? org.logoSrc.trim() : null,
+    ),
+    logoFileName:
+      typeof org.logoFileName === 'string' && org.logoFileName.trim()
+        ? org.logoFileName.trim()
+        : null,
+    tenantAdminName: shouldClearPlaceholderTenantAdmin ? '' : org.tenantAdminName,
+    tenantAdminEmail: shouldClearPlaceholderTenantAdmin ? '' : org.tenantAdminEmail,
+    identityProviderName,
+    identityProviderDisplayName,
+    identityProviderProtocol:
+      org.identityProviderProtocol === 'OIDC' || org.identityProviderProtocol === 'SAML'
+        ? org.identityProviderProtocol
+        : null,
+    identityProviderIssuerUrl,
+    identityProviderClientId,
+    identityProviders,
+    idpManagerEmail:
+      typeof org.idpManagerEmail === 'string' && org.idpManagerEmail.trim()
+        ? org.idpManagerEmail.trim().toLowerCase()
+        : null,
+    idpInviteToken:
+      typeof org.idpInviteToken === 'string' && org.idpInviteToken.trim()
+        ? org.idpInviteToken.trim()
+        : null,
+    idpInviteStatus:
+      org.idpInviteStatus === 'pending' ||
+      org.idpInviteStatus === 'accepted' ||
+      org.idpInviteStatus === 'expired'
+        ? org.idpInviteStatus
+        : 'none',
+    idpInviteSentAt:
+      typeof org.idpInviteSentAt === 'string' && org.idpInviteSentAt.trim()
+        ? org.idpInviteSentAt
+        : null,
+    idpInviteExpiresAt:
+      typeof org.idpInviteExpiresAt === 'string' && org.idpInviteExpiresAt.trim()
+        ? org.idpInviteExpiresAt
+        : null,
+    breakGlassName:
+      typeof org.breakGlassName === 'string' && org.breakGlassName.trim()
+        ? org.breakGlassName.trim()
+        : null,
+    breakGlassEmail,
+    breakGlassUsername:
+      typeof org.breakGlassUsername === 'string' && org.breakGlassUsername.trim()
+        ? org.slug === 'evergreen' &&
+          org.breakGlassUsername.trim().toLowerCase() === 'breakglass-evergreen'
+          ? generateBreakGlassUsername(org.slug)
+          : org.breakGlassUsername.trim().toLowerCase() === 'breakglass-northstar'
+            ? generateBreakGlassUsername('northsummit')
+            : org.breakGlassUsername.trim()
+        : typeof org.breakGlassEmail === 'string' && org.breakGlassEmail.trim()
+          ? generateBreakGlassUsername(org.slug)
+          : null,
+    breakGlassPassword:
+      typeof org.breakGlassPassword === 'string' && org.breakGlassPassword.trim()
+        ? rewriteBreakGlassPassword(org.breakGlassPassword.trim())
+        : typeof org.breakGlassEmail === 'string' && org.breakGlassEmail.trim()
+          ? getDemoBreakGlassPassword(org.slug)
+          : null,
+    breakGlassIssuedAt:
+      typeof org.breakGlassIssuedAt === 'string' && org.breakGlassIssuedAt.trim()
+        ? org.breakGlassIssuedAt
+        : typeof org.breakGlassEmail === 'string' && org.breakGlassEmail.trim()
+          ? (org.createdAt ?? null)
+          : null,
+    // Name is the source of truth — clears stub-only "connected" flags from earlier demos.
+    identityProviderConnected:
+      typeof org.identityProviderName === 'string' && Boolean(org.identityProviderName.trim()),
+    identityProviderConnectedBy: resolveIdentityProviderConnectedBy({
+      identityProviderConnected:
+        typeof org.identityProviderName === 'string' && Boolean(org.identityProviderName.trim()),
+      identityProviderConnectedBy: org.identityProviderConnectedBy,
+      idpInviteStatus:
+        org.idpInviteStatus === 'pending' ||
+        org.idpInviteStatus === 'accepted' ||
+        org.idpInviteStatus === 'expired'
+          ? org.idpInviteStatus
+          : 'none',
+    }),
+    additionalTenantAdmins: Array.isArray(org.additionalTenantAdmins)
+      ? org.additionalTenantAdmins
+          .filter(
+            (admin): admin is OrganizationRoleAssignment =>
+              typeof admin === 'object' &&
+              admin !== null &&
+              typeof admin.name === 'string' &&
+              typeof admin.email === 'string' &&
+              Boolean(admin.email.trim()),
+          )
+          .map((admin) => ({
+            name: admin.name.trim(),
+            email: admin.email.trim().toLowerCase(),
+            ...(isOrganizationAssignedRoleId(admin.roleId) &&
+            admin.roleId !== 'tenant-administrator'
+              ? { roleId: admin.roleId }
+              : {}),
+          }))
+      : [],
+    invitedTenantUserEmails: Array.isArray(org.invitedTenantUserEmails)
+      ? org.invitedTenantUserEmails
+          .filter((email): email is string => typeof email === 'string' && Boolean(email.trim()))
+          .map((email) => email.trim().toLowerCase())
+      : [],
+    rbacConfigured:
+      typeof org.identityProviderName === 'string' &&
+      Boolean(org.identityProviderName.trim()) &&
+      Boolean(org.rbacConfigured),
+  }
+
+  if (
+    normalized.idpInviteStatus === 'pending' &&
+    normalized.idpInviteExpiresAt &&
+    new Date(normalized.idpInviteExpiresAt).getTime() <= Date.now()
+  ) {
+    normalized.idpInviteStatus = 'expired'
+  }
+
+  const tenantName = normalized.name.trim()
+  if (tenantName) {
+    normalized.tenantId = tenantName
+  }
+
+  return normalized
+}
+
+const CANONICAL_DEMO_ORG_IDS = new Set([
+  DEMO_NORTH_SUMMIT_BANK_ORG_ID,
+  DEMO_HARBORLINE_CAPITAL_ORG_ID,
+  DEMO_REDWOOD_MUTUAL_ORG_ID,
+  DEMO_BLUESOLACE_ORG_ID,
+])
+
+function organizationCompletenessScore(org: RegisteredOrganization): number {
+  let score = 0
+  if (CANONICAL_DEMO_ORG_IDS.has(org.id)) {
+    score += 1000
+  }
+  if (org.billingAccountLinked) {
+    score += 100
+  }
+  if (org.tenantSetupStatus === 'ready') {
+    score += 80
+  }
+  if (org.tenantSetupStatus === 'billing_configured') {
+    score += 60
+  }
+  if (org.identityProviderConnected) {
+    score += 40
+  }
+  if (org.status === 'Active') {
+    score += 20
+  }
+  return score
+}
+
+function pickPreferredRegisteredOrganization(
+  current: RegisteredOrganization,
+  candidate: RegisteredOrganization,
+): RegisteredOrganization {
+  const currentScore = organizationCompletenessScore(current)
+  const candidateScore = organizationCompletenessScore(candidate)
+  if (candidateScore !== currentScore) {
+    return candidateScore > currentScore ? candidate : current
+  }
+
+  return candidate.createdAt >= current.createdAt ? candidate : current
+}
+
+function dedupeRegisteredOrganizationsBySlug(
+  organizations: readonly RegisteredOrganization[],
+): RegisteredOrganization[] {
+  const bySlug = new Map<string, RegisteredOrganization>()
+
+  for (const organization of organizations) {
+    const slug = organization.slug.trim().toLowerCase()
+    if (!slug) {
+      continue
+    }
+
+    const existing = bySlug.get(slug)
+    bySlug.set(
+      slug,
+      existing ? pickPreferredRegisteredOrganization(existing, organization) : organization,
+    )
+  }
+
+  return Array.from(bySlug.values())
+}
+
+function pruneIncompleteOnboardingOrphans(
+  organizations: readonly RegisteredOrganization[],
+): RegisteredOrganization[] {
+  return organizations.filter((organization) => {
+    if (CANONICAL_DEMO_ORG_IDS.has(organization.id)) {
+      return true
+    }
+    if (organization.billingAccountLinked || organization.tenantSetupStatus === 'ready') {
+      return true
+    }
+    if (organization.tenantSetupStatus === 'billing_configured') {
+      return true
+    }
+    if (organization.identityProviderConnected || organization.status === 'Active') {
+      return true
+    }
+    return false
+  })
+}
+
+function isRegisteredOrganization(value: unknown): value is RegisteredOrganization {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const org = value as Partial<RegisteredOrganization>
+  return (
+    typeof org.id === 'string' &&
+    typeof org.name === 'string' &&
+    typeof org.tenantId === 'string' &&
+    typeof org.slug === 'string' &&
+    typeof org.billingAccountId === 'string' &&
+    typeof org.billingAccountName === 'string' &&
+    typeof org.maxInstances === 'number' &&
+    typeof org.tenantAdminName === 'string' &&
+    typeof org.tenantAdminEmail === 'string' &&
+    (org.primaryDomain === undefined || typeof org.primaryDomain === 'string') &&
+    (org.status === 'Pending activation' || org.status === 'Active') &&
+    typeof org.createdAt === 'string'
+  )
+}
+
+export function getProviderRegisteredOrganizations(): RegisteredOrganization[] {
+  try {
+    const raw = readRegisteredOrganizationsRaw()
+    if (!raw) {
+      return []
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    const tenants = parsed.filter(isRegisteredOrganization)
+    const normalized = tenants.map(normalizeRegisteredOrganization)
+    const deduped = dedupeRegisteredOrganizationsBySlug(
+      pruneIncompleteOnboardingOrphans(normalized),
+    )
+    const needsPersist =
+      deduped.length !== tenants.length ||
+      deduped.some((tenant, index) => {
+        const original = tenants[index]
+        if (!original) {
+          return true
+        }
+        return (
+          original.id !== tenant.id ||
+          original.name !== tenant.name ||
+          original.tenantId !== tenant.tenantId ||
+          original.catalogItemId !== tenant.catalogItemId ||
+          original.catalogDisplayName !== tenant.catalogDisplayName ||
+          original.externalIpPoolName !== tenant.externalIpPoolName ||
+          original.billingAccountName !== tenant.billingAccountName ||
+          original.primaryDomain !== tenant.primaryDomain ||
+          original.identityProviderDisplayName !== tenant.identityProviderDisplayName ||
+          original.identityProviderIssuerUrl !== tenant.identityProviderIssuerUrl ||
+          original.identityProviderClientId !== tenant.identityProviderClientId ||
+          original.identityProviderConnectedBy !== tenant.identityProviderConnectedBy ||
+          original.tenantAdminName !== tenant.tenantAdminName ||
+          original.tenantAdminEmail !== tenant.tenantAdminEmail ||
+          original.breakGlassUsername !== tenant.breakGlassUsername ||
+          original.breakGlassPassword !== tenant.breakGlassPassword ||
+          JSON.stringify(original.additionalDomains ?? []) !==
+            JSON.stringify(tenant.additionalDomains)
+        )
+      })
+    if (needsPersist) {
+      setProviderRegisteredOrganizations(deduped)
+    }
+    return deduped
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Tenants must survive new tabs so IdP manager invite links work.
+ * Prefer localStorage; migrate any legacy sessionStorage payload once.
+ * When both exist, merge by id and keep invite/IdP fields from the richer record.
+ */
+function readRegisteredOrganizationsRaw(): string | null {
+  try {
+    const fromLocal = localStorage.getItem(PROVIDER_REGISTERED_ORGS_KEY)
+    const fromSession = sessionStorage.getItem(PROVIDER_REGISTERED_ORGS_KEY)
+
+    if (!fromLocal && !fromSession) {
+      return null
+    }
+
+    if (!fromLocal && fromSession) {
+      localStorage.setItem(PROVIDER_REGISTERED_ORGS_KEY, fromSession)
+      sessionStorage.removeItem(PROVIDER_REGISTERED_ORGS_KEY)
+      return fromSession
+    }
+
+    if (fromLocal && !fromSession) {
+      return fromLocal
+    }
+
+    const localOrgs = parseOrganizationArray(fromLocal)
+    const sessionOrgs = parseOrganizationArray(fromSession)
+    const byId = new Map<string, Record<string, unknown>>()
+
+    for (const org of localOrgs) {
+      const id = typeof org.id === 'string' ? org.id : null
+      if (id) {
+        byId.set(id, org)
+      }
+    }
+
+    for (const org of sessionOrgs) {
+      const id = typeof org.id === 'string' ? org.id : null
+      if (!id) {
+        continue
+      }
+      const existing = byId.get(id)
+      if (!existing) {
+        byId.set(id, org)
+        continue
+      }
+      byId.set(id, preferRicherOrganizationRecord(existing, org))
+    }
+
+    // Include session-only orgs already handled; also keep local-only.
+    const merged = Array.from(byId.values())
+    // Preserve any session org that lacked an id? skip.
+    const serialized = JSON.stringify(merged)
+    localStorage.setItem(PROVIDER_REGISTERED_ORGS_KEY, serialized)
+    sessionStorage.removeItem(PROVIDER_REGISTERED_ORGS_KEY)
+    return serialized
+  } catch {
+    return null
+  }
+}
+
+function parseOrganizationArray(raw: string | null): Array<Record<string, unknown>> {
+  if (!raw) {
+    return []
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed.filter(
+      (item): item is Record<string, unknown> => typeof item === 'object' && item !== null,
+    )
+  } catch {
+    return []
+  }
+}
+
+function preferRicherOrganizationRecord(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+): Record<string, unknown> {
+  const aToken = typeof a.idpInviteToken === 'string' && a.idpInviteToken.trim()
+  const bToken = typeof b.idpInviteToken === 'string' && b.idpInviteToken.trim()
+  if (bToken && !aToken) {
+    return b
+  }
+  if (aToken && !bToken) {
+    return a
+  }
+  const aPending = a.idpInviteStatus === 'pending'
+  const bPending = b.idpInviteStatus === 'pending'
+  if (bPending && !aPending) {
+    return b
+  }
+  return a
+}
+
+function writeRegisteredOrganizationsRaw(serialized: string): void {
+  localStorage.setItem(PROVIDER_REGISTERED_ORGS_KEY, serialized)
+  try {
+    sessionStorage.removeItem(PROVIDER_REGISTERED_ORGS_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function removeRegisteredOrganizationsRaw(): void {
+  try {
+    localStorage.removeItem(PROVIDER_REGISTERED_ORGS_KEY)
+  } catch {
+    /* ignore */
+  }
+  try {
+    sessionStorage.removeItem(PROVIDER_REGISTERED_ORGS_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Seeds North Summit Bank, Harborline Capital, and Redwood Mutual as Tenants page baselines.
+ */
+export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
+  try {
+    const current = getProviderRegisteredOrganizations()
+    const pools = getProviderExternalIpPools()
+    const northSummitPool =
+      getExternalIpPoolById(pools, DEFAULT_REGISTER_ORGANIZATION_FORM.externalIpPoolId) ??
+      pools.find((item) => item.assignedOrganizationId === DEMO_NORTH_SUMMIT_BANK_ORG_ID) ??
+      pools[0] ??
+      null
+    const harborlinePool =
+      getExternalIpPoolById(pools, 'eipool-standby-a') ??
+      pools.find((item) => item.assignedOrganizationId === DEMO_HARBORLINE_CAPITAL_ORG_ID) ??
+      null
+
+    const northSummitBase = createDemoNorthSummitBankOrganization({
+      catalogItemId: null,
+      catalogDisplayName: null,
+      externalIpPoolId:
+        northSummitPool?.id ?? DEFAULT_REGISTER_ORGANIZATION_FORM.externalIpPoolId,
+      externalIpPoolName: northSummitPool?.name ?? null,
+      externalIpPoolCidr: northSummitPool?.cidr ?? null,
+    })
+
+    const harborlineBase = createDemoHarborlineCapitalOrganization({
+      catalogItemId: null,
+      catalogDisplayName: null,
+      externalIpPoolId: harborlinePool?.id ?? 'eipool-standby-a',
+      externalIpPoolName: harborlinePool?.name ?? null,
+      externalIpPoolCidr: harborlinePool?.cidr ?? null,
+    })
+
+    const redwoodBase = createDemoRedwoodMutualOrganization()
+
+    const replacedTenants = current.filter(
+      (tenant) =>
+        tenant.id === northSummitBase.id ||
+        tenant.slug === northSummitBase.slug ||
+        tenant.id === harborlineBase.id ||
+        tenant.slug === DEMO_HARBORLINE_CAPITAL_SLUG ||
+        tenant.id === redwoodBase.id ||
+        tenant.slug === DEMO_REDWOOD_MUTUAL_SLUG ||
+        tenant.name === 'redwood-mutual' ||
+        tenant.name === 'Redwood Mutual',
+    )
+    const replacedIds = new Set(replacedTenants.map((tenant) => tenant.id))
+    const remainingTenants = current.filter(
+      (tenant) =>
+        !replacedIds.has(tenant.id) &&
+        tenant.id !== 'org-cedar-ridge-credit' &&
+        tenant.slug !== 'cedar-ridge-credit' &&
+        tenant.name !== 'cedar-ridge-credit' &&
+        tenant.name !== 'Cedar Ridge Credit',
+    )
+
+    const pendingInviteSource = replacedTenants.find(
+      (tenant) =>
+        (tenant.id === northSummitBase.id || tenant.slug === northSummitBase.slug) &&
+        hasPendingIdpInvite(tenant),
+    )
+    const northSummit = pendingInviteSource
+      ? {
+          ...northSummitBase,
+          idpManagerEmail: pendingInviteSource.idpManagerEmail,
+          idpInviteToken: pendingInviteSource.idpInviteToken,
+          idpInviteStatus: pendingInviteSource.idpInviteStatus,
+          idpInviteSentAt: pendingInviteSource.idpInviteSentAt,
+          idpInviteExpiresAt: pendingInviteSource.idpInviteExpiresAt,
+          identityProviderConnected: pendingInviteSource.identityProviderConnected,
+          identityProviderConnectedBy: pendingInviteSource.identityProviderConnectedBy,
+          identityProviderName: pendingInviteSource.identityProviderName,
+          identityProviderDisplayName: pendingInviteSource.identityProviderDisplayName,
+          identityProviderProtocol: pendingInviteSource.identityProviderProtocol,
+          identityProviderIssuerUrl: pendingInviteSource.identityProviderIssuerUrl,
+          identityProviderClientId: pendingInviteSource.identityProviderClientId,
+          identityProviders: pendingInviteSource.identityProviders ?? [],
+        }
+      : northSummitBase
+
+    if (replacedIds.size > 0) {
+      setProviderExternalIpPools(
+        pools.map((item) =>
+          item.assignedOrganizationId && replacedIds.has(item.assignedOrganizationId)
+            ? {
+                ...item,
+                assignedOrganizationId: null,
+                assignedOrganizationName: null,
+              }
+            : item,
+        ),
+      )
+    }
+
+    setProviderRegisteredOrganizations([
+      northSummit,
+      harborlineBase,
+      redwoodBase,
+      ...remainingTenants,
+    ])
+
+    if (northSummitPool) {
+      assignExternalIpPoolToRegisteredOrganization(northSummitPool.id, northSummit.id)
+    }
+    const northSummitReservedPool = getExternalIpPoolById(pools, 'eipool-northsummit-reserved')
+    if (northSummitReservedPool) {
+      assignExternalIpPoolToRegisteredOrganization(northSummitReservedPool.id, northSummit.id)
+    }
+    if (harborlinePool) {
+      assignExternalIpPoolToRegisteredOrganization(harborlinePool.id, harborlineBase.id)
+    }
+
+    return getProviderRegisteredOrganizations()
+  } catch {
+    return getProviderRegisteredOrganizations()
+  }
+}
+
+/** BlueSolace onboarding tenant for IdP manager. Does not replace seeded NSB/Harborline. */
+export function ensureBlueSolaceOnboardingOrganization(): RegisteredOrganization {
+  const current = getProviderRegisteredOrganizations()
+  const existing =
+    current.find((tenant) => tenant.id === DEMO_BLUESOLACE_ORG_ID) ??
+    current.find((tenant) => tenant.slug === DEMO_IDP_MANAGER_ORG_SLUG) ??
+    current.find((tenant) => tenant.name === DEMO_BLUESOLACE_ORG_NAME)
+
+  if (existing) {
+    const usesNorthSummitDomain =
+      existing.primaryDomain === DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN
+    const additionalLooksEmptyOrNorthSummit =
+      existing.identityProviders.length === 0 &&
+      (existing.additionalDomains.length === 0 ||
+        existing.additionalDomains.includes(DEMO_NORTH_SUMMIT_BANK_ADDITIONAL_DOMAIN))
+    const patch: Partial<RegisteredOrganization> = {}
+
+    if (!hasBreakGlassAccount(existing)) {
+      patch.breakGlassName = existing.breakGlassName?.trim() || 'IdP manager'
+      patch.breakGlassEmail =
+        existing.breakGlassEmail?.trim() || `idp-admin@${DEMO_BLUESOLACE_PRIMARY_DOMAIN}`
+      patch.breakGlassUsername = generateBreakGlassUsername(DEMO_IDP_MANAGER_ORG_SLUG)
+      patch.breakGlassPassword = getDemoBreakGlassPassword(DEMO_IDP_MANAGER_ORG_SLUG)
+      patch.breakGlassIssuedAt = existing.breakGlassIssuedAt ?? new Date().toISOString()
+    }
+
+    if (usesNorthSummitDomain || !existing.primaryDomain.trim()) {
+      patch.name = DEMO_BLUESOLACE_ORG_NAME
+      patch.primaryDomain = DEMO_BLUESOLACE_PRIMARY_DOMAIN
+      patch.billingAccountName = DEMO_BLUESOLACE_BILLING_ACCOUNT_NAME
+    }
+
+    if (additionalLooksEmptyOrNorthSummit) {
+      patch.additionalDomains = [DEMO_BLUESOLACE_ADDITIONAL_DOMAIN]
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return existing
+    }
+
+    return updateProviderRegisteredOrganization(existing.id, patch) ?? existing
+  }
+
+  const created = createDemoBlueSolaceOnboardingOrganization()
+  addProviderRegisteredOrganization(created)
+  return (
+    getProviderRegisteredOrganizations().find((tenant) => tenant.id === created.id) ?? created
+  )
+}
+
+export function addProviderRegisteredOrganization(org: RegisteredOrganization): void {
+  try {
+    const current = getProviderRegisteredOrganizations()
+    const slug = org.slug.trim().toLowerCase()
+    const existingIndex = current.findIndex(
+      (tenant) => tenant.slug.trim().toLowerCase() === slug,
+    )
+    if (existingIndex >= 0) {
+      const existing = current[existingIndex]!
+      const updated = normalizeRegisteredOrganization({
+        ...existing,
+        ...org,
+        id: existing.id,
+      })
+      setProviderRegisteredOrganizations(
+        current.map((tenant, index) => (index === existingIndex ? updated : tenant)),
+      )
+      return
+    }
+
+    writeRegisteredOrganizationsRaw(
+      JSON.stringify([...current, normalizeRegisteredOrganization(org)]),
+    )
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function getProviderRegisteredOrganizationByIdpInviteToken(
+  token: string,
+): RegisteredOrganization | null {
+  const normalizedToken = token.trim()
+  if (!normalizedToken) {
+    return null
+  }
+
+  return (
+    getProviderRegisteredOrganizations().find(
+      (tenant) => tenant.idpInviteToken === normalizedToken,
+    ) ?? null
+  )
+}
+
+export function updateProviderRegisteredOrganization(
+  organizationId: string,
+  patch: Partial<RegisteredOrganization>,
+): RegisteredOrganization | null {
+  try {
+    const tenants = getProviderRegisteredOrganizations()
+    const current = tenants.find((item) => item.id === organizationId)
+    if (!current) {
+      return null
+    }
+
+    const updated = normalizeRegisteredOrganization({ ...current, ...patch, id: current.id })
+    setProviderRegisteredOrganizations(
+      tenants.map((item) => (item.id === organizationId ? updated : item)),
+    )
+    return updated
+  } catch {
+    return null
+  }
+}
+
+export function removeProviderRegisteredOrganization(organizationId: string): boolean {
+  try {
+    const tenants = getProviderRegisteredOrganizations()
+    const next = tenants.filter((tenant) => tenant.id !== organizationId)
+    if (next.length === tenants.length) {
+      return false
+    }
+
+    setProviderRegisteredOrganizations(next)
+
+    const pools = getProviderExternalIpPools()
+    const hasAssignedPool = pools.some((pool) => pool.assignedOrganizationId === organizationId)
+    if (hasAssignedPool) {
+      setProviderExternalIpPools(
+        pools.map((pool) =>
+          pool.assignedOrganizationId === organizationId
+            ? {
+                ...pool,
+                assignedOrganizationId: null,
+                assignedOrganizationName: null,
+              }
+            : pool,
+        ),
+      )
+    }
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function getOrganizationsAssignedToCatalogItem(
+  catalogItemId: string,
+): RegisteredOrganization[] {
+  return getProviderRegisteredOrganizations().filter(
+    (tenant) => tenant.catalogItemId === catalogItemId,
+  )
+}
+
+export function assignCatalogToRegisteredOrganization(
+  organizationId: string,
+  catalog: ProviderCatalogDraft,
+): boolean {
+  try {
+    const tenants = getProviderRegisteredOrganizations()
+    const tenant = tenants.find((item) => item.id === organizationId)
+    if (!tenant) {
+      return false
+    }
+
+    if (tenant.catalogItemId && tenant.catalogItemId !== catalog.catalogItemId) {
+      return false
+    }
+
+    if (
+      tenant.catalogItemId === catalog.catalogItemId &&
+      tenant.catalogDisplayName === catalog.displayName
+    ) {
+      return true
+    }
+
+    setProviderRegisteredOrganizations(
+      tenants.map((item) =>
+        item.id === organizationId
+          ? {
+              ...item,
+              catalogItemId: catalog.catalogItemId,
+              catalogDisplayName: catalog.displayName,
+            }
+          : item,
+      ),
+    )
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function activateProviderRegisteredOrganizationBySlug(slug: string): void {
+  try {
+    const tenants = getProviderRegisteredOrganizations()
+    const updated = tenants.map((tenant) =>
+      tenant.slug === slug && tenant.status === 'Pending activation'
+        ? { ...tenant, status: 'Active' as const }
+        : tenant,
+    )
+
+    writeRegisteredOrganizationsRaw(JSON.stringify(updated))
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function clearProviderRegisteredOrganizations(): void {
+  try {
+    removeRegisteredOrganizationsRaw()
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+function isExternalIpPool(value: unknown): value is ExternalIpPool {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const pool = value as ExternalIpPool
+  return (
+    typeof pool.id === 'string' &&
+    typeof pool.name === 'string' &&
+    typeof pool.cidr === 'string' &&
+    typeof pool.dataCenter === 'string' &&
+    typeof pool.totalAddresses === 'number' &&
+    (pool.assignedOrganizationId === null || typeof pool.assignedOrganizationId === 'string') &&
+    (pool.assignedOrganizationName === null || typeof pool.assignedOrganizationName === 'string') &&
+    typeof pool.createdAt === 'string'
+  )
+}
+
+function isNorthSummitDemoExternalIpPool(pool: ExternalIpPool): boolean {
+  return (
+    pool.id === 'eipool-northsummit-edge' ||
+    pool.id === 'eipool-northsummit-reserved' ||
+    pool.name === 'northsummit-public-edge' ||
+    pool.name === 'northsummit-reserved-edge'
+  )
+}
+
+function normalizeExternalIpPool(pool: ExternalIpPool): ExternalIpPool {
+  const assignedOrganizationName =
+    pool.assignedOrganizationId === DEMO_NORTH_SUMMIT_BANK_ORG_ID ||
+    pool.assignedOrganizationId === 'org-northstar-bank' ||
+    pool.assignedOrganizationId === 'org_northstar_bank' ||
+    pool.assignedOrganizationName === 'North Summit Bank' ||
+    pool.assignedOrganizationName === 'Northstar Bank' ||
+    pool.assignedOrganizationName === 'Northsummit Bank' ||
+    (isNorthSummitDemoExternalIpPool(pool) && !pool.assignedOrganizationId)
+      ? DEMO_NORTH_SUMMIT_BANK_ORG_NAME
+      : pool.assignedOrganizationName === 'BlueSolace Financial Group' ||
+          pool.assignedOrganizationName === 'Bluestone Financial Group'
+        ? 'bluesolace-financial-group'
+        : pool.assignedOrganizationName
+
+  const assignedOrganizationId =
+    pool.assignedOrganizationId === 'org-northstar-bank' ||
+    pool.assignedOrganizationId === 'org_northstar_bank'
+      ? DEMO_NORTH_SUMMIT_BANK_ORG_ID
+      : isNorthSummitDemoExternalIpPool(pool) && !pool.assignedOrganizationId
+        ? DEMO_NORTH_SUMMIT_BANK_ORG_ID
+        : pool.assignedOrganizationId
+
+  const isHarborlinePool =
+    pool.id === 'eipool-standby-a' ||
+    pool.name === 'standby-pool-a' ||
+    pool.name === 'harborline-capital-public-edge'
+
+  let description = pool.description
+  if (!description) {
+    description = getExternalIpPoolDefaultDescription(pool)
+  } else if (isHarborlinePool && description === DEFAULT_NORTHSUMMIT_EXTERNAL_IP_POOL_DESCRIPTION) {
+    description = DEFAULT_PROVIDER_EXTERNAL_IP_POOL_DESCRIPTION
+  }
+
+  return {
+    ...pool,
+    id: pool.id === 'eipool-northstar-edge' ? 'eipool-northsummit-edge' : pool.id,
+    name: migrateDns1123ResourceName(pool.name),
+    description,
+    dataCenter: migrateDns1123DataCenter(pool.dataCenter),
+    assignedOrganizationId,
+    assignedOrganizationName,
+  }
+}
+
+function mergeMissingDefaultExternalIpPools(pools: ExternalIpPool[]): ExternalIpPool[] {
+  const existingIds = new Set(pools.map((pool) => pool.id))
+  const missing = DEFAULT_EXTERNAL_IP_POOLS.filter((pool) => !existingIds.has(pool.id))
+  const normalized = pools.map(normalizeExternalIpPool)
+  const assignmentChanged = normalized.some(
+    (pool, index) =>
+      pool.assignedOrganizationId !== pools[index]?.assignedOrganizationId ||
+      pool.assignedOrganizationName !== pools[index]?.assignedOrganizationName,
+  )
+
+  if (missing.length === 0) {
+    if (assignmentChanged) {
+      setProviderExternalIpPools(normalized)
+      ensureNorthSummitDemoPoolAssignments()
+      return normalized
+    }
+
+    return normalized
+  }
+
+  const merged = [...normalized, ...missing.map(normalizeExternalIpPool)]
+  setProviderExternalIpPools(merged)
+  ensureNorthSummitDemoPoolAssignments()
+
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_EXTERNAL_IP_POOLS_KEY)
+    if (!raw) {
+      return merged
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return merged
+    }
+
+    return parsed.filter(isExternalIpPool).map(normalizeExternalIpPool)
+  } catch {
+    return merged
+  }
+}
+
+function ensureNorthSummitDemoPoolAssignments(): void {
+  const northSummit = getProviderRegisteredOrganizations().find(
+    (organization) =>
+      organization.id === DEMO_NORTH_SUMMIT_BANK_ORG_ID ||
+      organization.slug === DEMO_NORTH_SUMMIT_BANK_SLUG,
+  )
+
+  if (!northSummit) {
+    return
+  }
+
+  for (const poolId of ['eipool-northsummit-edge', 'eipool-northsummit-reserved'] as const) {
+    assignExternalIpPoolToRegisteredOrganization(poolId, northSummit.id)
+  }
+}
+
+export function getProviderExternalIpPools(): ExternalIpPool[] {
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_EXTERNAL_IP_POOLS_KEY)
+    if (!raw) {
+      sessionStorage.setItem(
+        PROVIDER_EXTERNAL_IP_POOLS_KEY,
+        JSON.stringify(DEFAULT_EXTERNAL_IP_POOLS),
+      )
+      return mergeMissingDefaultExternalIpPools(
+        DEFAULT_EXTERNAL_IP_POOLS.map(normalizeExternalIpPool),
+      )
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return [...DEFAULT_EXTERNAL_IP_POOLS]
+    }
+
+    const pools = parsed.filter(isExternalIpPool).map(normalizeExternalIpPool)
+    if (pools.length === 0) {
+      return [...DEFAULT_EXTERNAL_IP_POOLS]
+    }
+
+    const needsPersist = pools.some((pool, index) => {
+      const original = parsed[index]
+      if (!original || typeof original !== 'object') {
+        return true
+      }
+      const candidate = original as ExternalIpPool
+      return (
+        candidate.name !== pool.name ||
+        candidate.description !== pool.description ||
+        candidate.dataCenter !== pool.dataCenter ||
+        candidate.assignedOrganizationId !== pool.assignedOrganizationId ||
+        candidate.assignedOrganizationName !== pool.assignedOrganizationName
+      )
+    })
+    if (needsPersist) {
+      sessionStorage.setItem(PROVIDER_EXTERNAL_IP_POOLS_KEY, JSON.stringify(pools))
+    }
+
+    return mergeMissingDefaultExternalIpPools(pools)
+  } catch {
+    return [...DEFAULT_EXTERNAL_IP_POOLS]
+  }
+}
+
+export function setProviderExternalIpPools(pools: ExternalIpPool[]): void {
+  try {
+    sessionStorage.setItem(PROVIDER_EXTERNAL_IP_POOLS_KEY, JSON.stringify(pools))
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function addProviderExternalIpPool(pool: ExternalIpPool): void {
+  const current = getProviderExternalIpPools()
+  setProviderExternalIpPools([...current, pool])
+}
+
+export function updateProviderExternalIpPool(pool: ExternalIpPool): void {
+  setProviderExternalIpPools(replaceInventoryItemById(getProviderExternalIpPools(), pool))
+}
+
+export function deleteProviderExternalIpPool(poolId: string): void {
+  setProviderExternalIpPools(
+    removeInventoryItemById(getProviderExternalIpPools(), poolId),
+  )
+}
+
+export function assignExternalIpPoolToOrganization(
+  poolId: string,
+  organizationId: string,
+  organizationName: string,
+): void {
+  const pools = getProviderExternalIpPools()
+  const updated = pools.map((pool) =>
+    pool.id === poolId
+      ? {
+          ...pool,
+          assignedOrganizationId: organizationId,
+          assignedOrganizationName: organizationName,
+        }
+      : pool,
+  )
+
+  setProviderExternalIpPools(updated)
+}
+
+function setProviderRegisteredOrganizations(tenants: RegisteredOrganization[]): void {
+  try {
+    writeRegisteredOrganizationsRaw(JSON.stringify(tenants))
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function assignExternalIpPoolToRegisteredOrganization(
+  poolId: string,
+  organizationId: string,
+): boolean {
+  try {
+    const pools = getProviderExternalIpPools()
+    const pool = pools.find((item) => item.id === poolId)
+    if (!pool) {
+      return false
+    }
+
+    const tenants = getProviderRegisteredOrganizations()
+    const tenant = tenants.find((item) => item.id === organizationId)
+    if (!tenant) {
+      return false
+    }
+
+    if (
+      pool.assignedOrganizationId !== null &&
+      pool.assignedOrganizationId !== organizationId
+    ) {
+      return false
+    }
+
+    if (pool.assignedOrganizationId === organizationId) {
+      return true
+    }
+
+    assignExternalIpPoolToOrganization(poolId, tenant.id, tenant.name)
+    setProviderRegisteredOrganizations(
+      tenants.map((item) =>
+        item.id === organizationId
+          ? tenant.externalIpPoolId
+            ? item
+            : {
+                ...item,
+                externalIpPoolId: pool.id,
+                externalIpPoolName: pool.name,
+                externalIpPoolCidr: pool.cidr,
+              }
+          : item,
+      ),
+    )
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function clearProviderExternalIpPools(): void {
+  try {
+    sessionStorage.removeItem(PROVIDER_EXTERNAL_IP_POOLS_KEY)
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+function isProviderVirtualNetwork(value: unknown): value is ProviderVirtualNetwork {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const network = value as ProviderVirtualNetwork
+  return (
+    typeof network.id === 'string' &&
+    typeof network.name === 'string' &&
+    typeof network.detail === 'string' &&
+    typeof network.cidr === 'string' &&
+    (network.ipv6Cidr === undefined || typeof network.ipv6Cidr === 'string') &&
+    (network.dataCenter === undefined || typeof network.dataCenter === 'string') &&
+    typeof network.createdAt === 'string'
+  )
+}
+
+function normalizeProviderVirtualNetwork(network: ProviderVirtualNetwork): ProviderVirtualNetwork {
+  return {
+    ...network,
+    name: migrateDns1123ResourceName(network.name),
+    dataCenter: network.dataCenter
+      ? migrateDns1123DataCenter(network.dataCenter)
+      : network.dataCenter,
+    ipv6Cidr: network.ipv6Cidr?.trim() ?? '',
+    status: getNetworkInventoryStatus(network),
+    natGateway: network.natGateway
+      ? {
+          ...network.natGateway,
+          status: getNetworkInventoryStatus(network.natGateway),
+        }
+      : network.natGateway,
+  }
+}
+
+function isProviderSubnet(value: unknown): value is ProviderSubnet {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const subnet = value as ProviderSubnet
+  return (
+    typeof subnet.id === 'string' &&
+    typeof subnet.name === 'string' &&
+    typeof subnet.detail === 'string' &&
+    typeof subnet.cidr === 'string' &&
+    typeof subnet.vlan === 'string' &&
+    typeof subnet.virtualNetworkId === 'string' &&
+    typeof subnet.createdAt === 'string'
+  )
+}
+
+function normalizeProviderSubnet(subnet: ProviderSubnet): ProviderSubnet {
+  return {
+    ...subnet,
+    status: getNetworkInventoryStatus(subnet),
+  }
+}
+
+function isProviderSecurityGroup(value: unknown): value is ProviderSecurityGroup & {
+  virtualNetworkId?: string
+  inboundRules?: string
+  outboundRules?: string
+} {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const group = value as Record<string, unknown>
+  return (
+    typeof group.id === 'string' &&
+    typeof group.name === 'string' &&
+    typeof group.detail === 'string' &&
+    typeof group.createdAt === 'string' &&
+    (group.virtualNetworkId === undefined || typeof group.virtualNetworkId === 'string') &&
+    (group.inboundRules === undefined || typeof group.inboundRules === 'string') &&
+    (group.outboundRules === undefined || typeof group.outboundRules === 'string')
+  )
+}
+
+function normalizeProviderSecurityGroup(
+  group: ProviderSecurityGroup & {
+    virtualNetworkId?: string
+    inboundRules?: string
+    outboundRules?: string
+  },
+): ProviderSecurityGroup {
+  return {
+    id: group.id,
+    name: group.name,
+    detail: group.detail,
+    virtualNetworkId: group.virtualNetworkId?.trim()
+      ? group.virtualNetworkId
+      : (DEFAULT_PROVIDER_VIRTUAL_NETWORKS[0]?.id ?? ''),
+    inboundRules: group.inboundRules?.trim() ? group.inboundRules : 'None',
+    outboundRules: group.outboundRules?.trim() ? group.outboundRules : 'Allow all',
+    status: getNetworkInventoryStatus(group),
+    createdAt: group.createdAt,
+  }
+}
+
+export function getProviderVirtualNetworks(): ProviderVirtualNetwork[] {
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_VIRTUAL_NETWORKS_KEY)
+    if (!raw) {
+      sessionStorage.setItem(
+        PROVIDER_VIRTUAL_NETWORKS_KEY,
+        JSON.stringify(DEFAULT_PROVIDER_VIRTUAL_NETWORKS),
+      )
+      return ensureDemoNatGatewayOnTenantWorkload([...DEFAULT_PROVIDER_VIRTUAL_NETWORKS])
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return ensureDemoNatGatewayOnTenantWorkload([...DEFAULT_PROVIDER_VIRTUAL_NETWORKS])
+    }
+
+    const networks = parsed.filter(isProviderVirtualNetwork).map(normalizeProviderVirtualNetwork)
+    if (networks.length === 0) {
+      return ensureDemoNatGatewayOnTenantWorkload([...DEFAULT_PROVIDER_VIRTUAL_NETWORKS])
+    }
+
+    const needsPersist = networks.some((network, index) => {
+      const original = parsed[index]
+      if (!original || typeof original !== 'object') {
+        return true
+      }
+      const candidate = original as ProviderVirtualNetwork
+      return (
+        candidate.name !== network.name ||
+        candidate.dataCenter !== network.dataCenter ||
+        candidate.ipv6Cidr !== network.ipv6Cidr
+      )
+    })
+    if (needsPersist) {
+      sessionStorage.setItem(PROVIDER_VIRTUAL_NETWORKS_KEY, JSON.stringify(networks))
+    }
+
+    return ensureDemoNatGatewayOnTenantWorkload(networks)
+  } catch {
+    return ensureDemoNatGatewayOnTenantWorkload([...DEFAULT_PROVIDER_VIRTUAL_NETWORKS])
+  }
+}
+
+export function setProviderVirtualNetworks(networks: ProviderVirtualNetwork[]): void {
+  try {
+    sessionStorage.setItem(PROVIDER_VIRTUAL_NETWORKS_KEY, JSON.stringify(networks))
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function addProviderVirtualNetwork(network: ProviderVirtualNetwork): void {
+  setProviderVirtualNetworks([...getProviderVirtualNetworks(), network])
+}
+
+export function updateProviderVirtualNetwork(network: ProviderVirtualNetwork): void {
+  setProviderVirtualNetworks(replaceInventoryItemById(getProviderVirtualNetworks(), network))
+}
+
+export function deleteProviderVirtualNetwork(networkId: string): void {
+  setProviderVirtualNetworks(removeInventoryItemById(getProviderVirtualNetworks(), networkId))
+  setProviderSubnets(
+    getProviderSubnets().filter((subnet) => subnet.virtualNetworkId !== networkId),
+  )
+  setProviderSecurityGroups(
+    getProviderSecurityGroups().filter((group) => group.virtualNetworkId !== networkId),
+  )
+}
+
+export function getProviderSubnets(): ProviderSubnet[] {
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_SUBNETS_KEY)
+    if (!raw) {
+      sessionStorage.setItem(PROVIDER_SUBNETS_KEY, JSON.stringify(DEFAULT_PROVIDER_SUBNETS))
+      return [...DEFAULT_PROVIDER_SUBNETS]
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return [...DEFAULT_PROVIDER_SUBNETS]
+    }
+
+    const subnets = parsed.filter(isProviderSubnet).map(normalizeProviderSubnet)
+    return subnets.length > 0 ? subnets : [...DEFAULT_PROVIDER_SUBNETS]
+  } catch {
+    return [...DEFAULT_PROVIDER_SUBNETS]
+  }
+}
+
+export function setProviderSubnets(subnets: ProviderSubnet[]): void {
+  try {
+    sessionStorage.setItem(PROVIDER_SUBNETS_KEY, JSON.stringify(subnets))
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function addProviderSubnet(subnet: ProviderSubnet): void {
+  setProviderSubnets([...getProviderSubnets(), subnet])
+}
+
+export function updateProviderSubnet(subnet: ProviderSubnet): void {
+  setProviderSubnets(replaceInventoryItemById(getProviderSubnets(), subnet))
+}
+
+export function deleteProviderSubnet(subnetId: string): void {
+  setProviderSubnets(removeInventoryItemById(getProviderSubnets(), subnetId))
+}
+
+export function getProviderSecurityGroups(): ProviderSecurityGroup[] {
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_SECURITY_GROUPS_KEY)
+    if (!raw) {
+      sessionStorage.setItem(
+        PROVIDER_SECURITY_GROUPS_KEY,
+        JSON.stringify(DEFAULT_PROVIDER_SECURITY_GROUPS),
+      )
+      return [...DEFAULT_PROVIDER_SECURITY_GROUPS]
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return [...DEFAULT_PROVIDER_SECURITY_GROUPS]
+    }
+
+    const groups = parsed.filter(isProviderSecurityGroup).map(normalizeProviderSecurityGroup)
+    if (groups.length === 0) {
+      return [...DEFAULT_PROVIDER_SECURITY_GROUPS]
+    }
+
+    const needsPersist = parsed.some((item, index) => {
+      if (!item || typeof item !== 'object') {
+        return true
+      }
+      const original = item as {
+        virtualNetworkId?: unknown
+        inboundRules?: unknown
+        outboundRules?: unknown
+      }
+      const normalized = groups[index]
+      return (
+        original.virtualNetworkId !== normalized?.virtualNetworkId ||
+        original.inboundRules !== normalized?.inboundRules ||
+        original.outboundRules !== normalized?.outboundRules
+      )
+    })
+    if (needsPersist) {
+      sessionStorage.setItem(PROVIDER_SECURITY_GROUPS_KEY, JSON.stringify(groups))
+    }
+
+    return groups
+  } catch {
+    return [...DEFAULT_PROVIDER_SECURITY_GROUPS]
+  }
+}
+
+export function setProviderSecurityGroups(groups: ProviderSecurityGroup[]): void {
+  try {
+    sessionStorage.setItem(PROVIDER_SECURITY_GROUPS_KEY, JSON.stringify(groups))
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function addProviderSecurityGroup(group: ProviderSecurityGroup): void {
+  setProviderSecurityGroups([...getProviderSecurityGroups(), group])
+}
+
+export function updateProviderSecurityGroup(group: ProviderSecurityGroup): void {
+  setProviderSecurityGroups(replaceInventoryItemById(getProviderSecurityGroups(), group))
+}
+
+export function deleteProviderSecurityGroup(groupId: string): void {
+  setProviderSecurityGroups(removeInventoryItemById(getProviderSecurityGroups(), groupId))
+}
+
+export function getCatalogVirtualNetworkOptions(): CatalogNetworkResourceOption[] {
+  return getProviderVirtualNetworks().map(toCatalogNetworkOption)
+}
+
+export function getCatalogSubnetOptions(virtualNetworkId?: string): CatalogNetworkResourceOption[] {
+  const subnets = getProviderSubnets()
+  const scoped = virtualNetworkId
+    ? subnets.filter((subnet) => subnet.virtualNetworkId === virtualNetworkId)
+    : subnets
+  const options = (scoped.length > 0 ? scoped : subnets).map(toCatalogNetworkOption)
+  return options
+}
+
+export function getCatalogSecurityGroupOptions(): CatalogNetworkResourceOption[] {
+  return getProviderSecurityGroups().map(toCatalogNetworkOption)
+}
+
+export function getCatalogExternalIpPoolOptions(): CatalogNetworkResourceOption[] {
+  return getProviderExternalIpPools().map(toExternalIpPoolCatalogOption)
+}
+
+function isComputeImage(value: unknown): value is ComputeImage {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const image = value as ComputeImage
+  return (
+    typeof image.id === 'string' &&
+    typeof image.name === 'string' &&
+    typeof image.abbrev === 'string' &&
+    typeof image.architecture === 'string' &&
+    typeof image.sizeLabel === 'string' &&
+    typeof image.imageUrl === 'string' &&
+    typeof image.checksum === 'string' &&
+    (image.format === 'qcow2' || image.format === 'raw') &&
+    typeof image.recommended === 'boolean' &&
+    typeof image.createdAt === 'string'
+  )
+}
+
+export function getProviderComputeImages(): ComputeImage[] {
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_COMPUTE_IMAGES_KEY)
+    if (!raw) {
+      sessionStorage.setItem(PROVIDER_COMPUTE_IMAGES_KEY, JSON.stringify(DEFAULT_COMPUTE_IMAGES))
+      return [...DEFAULT_COMPUTE_IMAGES]
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return [...DEFAULT_COMPUTE_IMAGES]
+    }
+
+    const images = parsed.filter(isComputeImage)
+    return images.length > 0 ? images : [...DEFAULT_COMPUTE_IMAGES]
+  } catch {
+    return [...DEFAULT_COMPUTE_IMAGES]
+  }
+}
+
+export function setProviderComputeImages(images: ComputeImage[]): void {
+  try {
+    sessionStorage.setItem(PROVIDER_COMPUTE_IMAGES_KEY, JSON.stringify(images))
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function addProviderComputeImage(image: ComputeImage): void {
+  const current = getProviderComputeImages()
+  setProviderComputeImages([...current, image])
+}
+
+export function isProviderComputeImageInUse(imageId: string): boolean {
+  const savedTemplate = getProviderSavedTemplate()
+  return savedTemplate?.osImageId === imageId
+}
+
+export function clearProviderComputeImages(): void {
+  try {
+    sessionStorage.removeItem(PROVIDER_COMPUTE_IMAGES_KEY)
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function setProviderOpenRegisterOrgWizard(): void {
+  try {
+    sessionStorage.setItem(PROVIDER_OPEN_REGISTER_ORG_WIZARD_KEY, 'true')
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function consumeProviderOpenRegisterOrgWizard(): boolean {
+  try {
+    const shouldOpen = sessionStorage.getItem(PROVIDER_OPEN_REGISTER_ORG_WIZARD_KEY) === 'true'
+    sessionStorage.removeItem(PROVIDER_OPEN_REGISTER_ORG_WIZARD_KEY)
+    return shouldOpen
+  } catch {
+    return false
+  }
+}
+
+export type VipCatalogResumeIntent =
+  | { kind: 'publish' }
+  | { kind: 'edit'; catalogItemId: string }
+
+export function setProviderVipCatalogResumeIntent(intent: VipCatalogResumeIntent): void {
+  try {
+    sessionStorage.setItem(PROVIDER_VIP_CATALOG_RESUME_KEY, JSON.stringify(intent))
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+export function peekProviderVipCatalogResumeIntent(): VipCatalogResumeIntent | null {
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_VIP_CATALOG_RESUME_KEY)
+    if (!raw) {
+      return null
+    }
+
+    const parsed = JSON.parse(raw) as VipCatalogResumeIntent
+    if (parsed?.kind === 'publish') {
+      return { kind: 'publish' }
+    }
+
+    if (parsed?.kind === 'edit' && typeof parsed.catalogItemId === 'string') {
+      return { kind: 'edit', catalogItemId: parsed.catalogItemId }
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function consumeProviderVipCatalogResumeIntent(): VipCatalogResumeIntent | null {
+  const intent = peekProviderVipCatalogResumeIntent()
+  try {
+    sessionStorage.removeItem(PROVIDER_VIP_CATALOG_RESUME_KEY)
+  } catch {
+    /* demo storage unavailable */
+  }
+  return intent
+}
+
+export function clearProviderOnboardingState(): void {
+  clearProviderSetupComplete()
+  clearProviderServicesSelected()
+  clearProviderCatalogDraft()
+  clearProviderSavedTemplate()
+  clearProviderRegisteredOrganizations()
+  clearProviderExternalIpPools()
+  clearProviderComputeImages()
+  try {
+    sessionStorage.removeItem(PROVIDER_ACTIVE_NAV_KEY)
+  } catch {
+    /* demo storage unavailable */
+  }
+}

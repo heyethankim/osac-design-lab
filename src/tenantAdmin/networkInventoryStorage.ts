@@ -1,0 +1,437 @@
+import {
+  DEFAULT_EXTERNAL_IP_POOLS,
+  getNorthsummitDemoExternalIpPools,
+  NORTHSUMMIT_LEGACY_ORGANIZATION_IDS,
+  type ExternalIpPool,
+} from '../providerAdmin/externalIpPools'
+import { getProviderExternalIpPools } from '../providerSetup/storage'
+import { getRegisteredOrganizationBySlug } from './organizations'
+import {
+  DEFAULT_NORTHSUMMIT_EXTERNAL_IPS,
+  type ExternalIp,
+} from '../providerAdmin/externalIps'
+import {
+  toExternalIpPoolCatalogOption,
+  type CatalogNetworkResourceOption,
+} from '../providerAdmin/catalogNetworkPolicy'
+import {
+  DEFAULT_PROVIDER_SECURITY_GROUPS,
+  DEFAULT_PROVIDER_SUBNETS,
+  DEFAULT_PROVIDER_VIRTUAL_NETWORKS,
+  ensureDemoNatGatewayOnTenantWorkload,
+  getNetworkInventoryStatus,
+  toCatalogNetworkOption,
+  type ProviderSecurityGroup,
+  type ProviderSubnet,
+  type ProviderVirtualNetwork,
+} from '../providerAdmin/networkInventory'
+import {
+  removeInventoryItemById,
+  replaceInventoryItemById,
+} from '../networking/networkInventoryStorageUtils'
+
+const TENANT_VIRTUAL_NETWORKS_KEY_PREFIX = 'bmaas-tenant-virtual-networks-'
+const TENANT_SUBNETS_KEY_PREFIX = 'bmaas-tenant-subnets-'
+const TENANT_SECURITY_GROUPS_KEY_PREFIX = 'bmaas-tenant-security-groups-'
+const TENANT_EXTERNAL_IP_POOLS_KEY_PREFIX = 'bmaas-tenant-external-ip-pools-'
+const TENANT_EXTERNAL_IPS_KEY_PREFIX = 'bmaas-tenant-external-ips-'
+
+function tenantKey(prefix: string, slug: string): string {
+  return `${prefix}${slug}`
+}
+
+function cloneDefaults<T>(items: readonly T[]): T[] {
+  return items.map((item) => ({ ...item }))
+}
+
+function readJsonArray<T>(
+  key: string,
+  fallback: T[],
+  isValid: (value: unknown) => value is T,
+): T[] {
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (!raw) {
+      sessionStorage.setItem(key, JSON.stringify(fallback))
+      return cloneDefaults(fallback)
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      sessionStorage.setItem(key, JSON.stringify(fallback))
+      return cloneDefaults(fallback)
+    }
+
+    const items = parsed.filter(isValid)
+    if (items.length === 0) {
+      sessionStorage.setItem(key, JSON.stringify(fallback))
+      return cloneDefaults(fallback)
+    }
+
+    return items
+  } catch {
+    return cloneDefaults(fallback)
+  }
+}
+
+function writeJsonArray<T>(key: string, items: T[]): void {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(items))
+  } catch {
+    /* demo storage unavailable */
+  }
+}
+
+function isProviderVirtualNetwork(value: unknown): value is ProviderVirtualNetwork {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const network = value as ProviderVirtualNetwork
+  return (
+    typeof network.id === 'string' &&
+    typeof network.name === 'string' &&
+    typeof network.detail === 'string' &&
+    typeof network.cidr === 'string' &&
+    typeof network.createdAt === 'string'
+  )
+}
+
+function isProviderSubnet(value: unknown): value is ProviderSubnet {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const subnet = value as ProviderSubnet
+  return (
+    typeof subnet.id === 'string' &&
+    typeof subnet.name === 'string' &&
+    typeof subnet.detail === 'string' &&
+    typeof subnet.cidr === 'string' &&
+    typeof subnet.vlan === 'string' &&
+    typeof subnet.virtualNetworkId === 'string' &&
+    typeof subnet.createdAt === 'string'
+  )
+}
+
+function isProviderSecurityGroup(value: unknown): value is ProviderSecurityGroup {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const group = value as ProviderSecurityGroup
+  return (
+    typeof group.id === 'string' &&
+    typeof group.name === 'string' &&
+    typeof group.detail === 'string' &&
+    typeof group.createdAt === 'string'
+  )
+}
+
+/** Tenant-owned network inventory seeded independently from provider defaults. */
+export function getTenantVirtualNetworks(slug: string): ProviderVirtualNetwork[] {
+  return ensureDemoNatGatewayOnTenantWorkload(
+    readJsonArray(
+      tenantKey(TENANT_VIRTUAL_NETWORKS_KEY_PREFIX, slug),
+      DEFAULT_PROVIDER_VIRTUAL_NETWORKS,
+      isProviderVirtualNetwork,
+    ).map((network) => ({
+      ...network,
+      status: getNetworkInventoryStatus(network),
+    })),
+  )
+}
+
+export function setTenantVirtualNetworks(
+  slug: string,
+  networks: ProviderVirtualNetwork[],
+): void {
+  writeJsonArray(tenantKey(TENANT_VIRTUAL_NETWORKS_KEY_PREFIX, slug), networks)
+}
+
+export function addTenantVirtualNetwork(
+  slug: string,
+  network: ProviderVirtualNetwork,
+): void {
+  setTenantVirtualNetworks(slug, [...getTenantVirtualNetworks(slug), network])
+}
+
+export function updateTenantVirtualNetwork(
+  slug: string,
+  network: ProviderVirtualNetwork,
+): void {
+  setTenantVirtualNetworks(
+    slug,
+    replaceInventoryItemById(getTenantVirtualNetworks(slug), network),
+  )
+}
+
+export function deleteTenantVirtualNetwork(slug: string, networkId: string): void {
+  setTenantVirtualNetworks(
+    slug,
+    removeInventoryItemById(getTenantVirtualNetworks(slug), networkId),
+  )
+  setTenantSubnets(
+    slug,
+    getTenantSubnets(slug).filter((subnet) => subnet.virtualNetworkId !== networkId),
+  )
+  setTenantSecurityGroups(
+    slug,
+    getTenantSecurityGroups(slug).filter((group) => group.virtualNetworkId !== networkId),
+  )
+}
+
+export function getTenantSubnets(slug: string): ProviderSubnet[] {
+  return readJsonArray(
+    tenantKey(TENANT_SUBNETS_KEY_PREFIX, slug),
+    DEFAULT_PROVIDER_SUBNETS,
+    isProviderSubnet,
+  ).map((subnet) => ({
+    ...subnet,
+    status: getNetworkInventoryStatus(subnet),
+  }))
+}
+
+export function setTenantSubnets(slug: string, subnets: ProviderSubnet[]): void {
+  writeJsonArray(tenantKey(TENANT_SUBNETS_KEY_PREFIX, slug), subnets)
+}
+
+export function addTenantSubnet(slug: string, subnet: ProviderSubnet): void {
+  setTenantSubnets(slug, [...getTenantSubnets(slug), subnet])
+}
+
+export function updateTenantSubnet(slug: string, subnet: ProviderSubnet): void {
+  setTenantSubnets(slug, replaceInventoryItemById(getTenantSubnets(slug), subnet))
+}
+
+export function deleteTenantSubnet(slug: string, subnetId: string): void {
+  setTenantSubnets(slug, removeInventoryItemById(getTenantSubnets(slug), subnetId))
+}
+
+export function getTenantSecurityGroups(slug: string): ProviderSecurityGroup[] {
+  return readJsonArray(
+    tenantKey(TENANT_SECURITY_GROUPS_KEY_PREFIX, slug),
+    DEFAULT_PROVIDER_SECURITY_GROUPS,
+    isProviderSecurityGroup,
+  ).map((group) => ({
+    ...group,
+    status: getNetworkInventoryStatus(group),
+  }))
+}
+
+export function setTenantSecurityGroups(
+  slug: string,
+  groups: ProviderSecurityGroup[],
+): void {
+  writeJsonArray(tenantKey(TENANT_SECURITY_GROUPS_KEY_PREFIX, slug), groups)
+}
+
+export function addTenantSecurityGroup(
+  slug: string,
+  group: ProviderSecurityGroup,
+): void {
+  setTenantSecurityGroups(slug, [...getTenantSecurityGroups(slug), group])
+}
+
+export function updateTenantSecurityGroup(
+  slug: string,
+  group: ProviderSecurityGroup,
+): void {
+  setTenantSecurityGroups(
+    slug,
+    replaceInventoryItemById(getTenantSecurityGroups(slug), group),
+  )
+}
+
+export function deleteTenantSecurityGroup(slug: string, groupId: string): void {
+  setTenantSecurityGroups(
+    slug,
+    removeInventoryItemById(getTenantSecurityGroups(slug), groupId),
+  )
+}
+
+function collectTenantOrganizationIds(
+  slug: string,
+  organizationId?: string | null,
+): Set<string> {
+  const orgIds = new Set<string>()
+
+  if (organizationId) {
+    orgIds.add(organizationId)
+  }
+
+  const registered = getRegisteredOrganizationBySlug(slug)
+  if (registered?.id) {
+    orgIds.add(registered.id)
+  }
+
+  if (slug === 'northsummit' || slug === 'northstar') {
+    for (const legacyOrgId of NORTHSUMMIT_LEGACY_ORGANIZATION_IDS) {
+      orgIds.add(legacyOrgId)
+    }
+  }
+
+  return orgIds
+}
+
+/** Provider-assigned pools visible to a tenant workspace (never unassigned standby pools). */
+export function resolveTenantAssignedExternalIpPools(
+  slug: string,
+  organizationId?: string | null,
+): ExternalIpPool[] {
+  const pools = getProviderExternalIpPools()
+  const orgIds = collectTenantOrganizationIds(slug, organizationId)
+
+  const assigned = pools.filter(
+    (pool) => pool.assignedOrganizationId !== null && orgIds.has(pool.assignedOrganizationId),
+  )
+  if (assigned.length > 0) {
+    return assigned
+  }
+
+  if (slug === 'northsummit' || slug === 'northstar') {
+    const demoPools = getNorthsummitDemoExternalIpPools(pools)
+    if (demoPools.length > 0) {
+      return demoPools
+    }
+
+    return getNorthsummitDemoExternalIpPools(DEFAULT_EXTERNAL_IP_POOLS)
+  }
+
+  return []
+}
+
+export function getTenantExternalIpPools(slug: string): ExternalIpPool[] {
+  return resolveTenantAssignedExternalIpPools(slug)
+}
+
+export function setTenantExternalIpPools(slug: string, pools: ExternalIpPool[]): void {
+  writeJsonArray(tenantKey(TENANT_EXTERNAL_IP_POOLS_KEY_PREFIX, slug), pools)
+}
+
+export function addTenantExternalIpPool(slug: string, pool: ExternalIpPool): void {
+  setTenantExternalIpPools(slug, [...getTenantExternalIpPools(slug), pool])
+}
+
+export function updateTenantExternalIpPool(slug: string, pool: ExternalIpPool): void {
+  setTenantExternalIpPools(
+    slug,
+    replaceInventoryItemById(getTenantExternalIpPools(slug), pool),
+  )
+}
+
+export function deleteTenantExternalIpPool(slug: string, poolId: string): void {
+  setTenantExternalIpPools(
+    slug,
+    removeInventoryItemById(getTenantExternalIpPools(slug), poolId),
+  )
+}
+
+export function getTenantVirtualNetworkOptions(
+  slug: string,
+): CatalogNetworkResourceOption[] {
+  return getTenantVirtualNetworks(slug).map(toCatalogNetworkOption)
+}
+
+export function getTenantSubnetOptions(
+  slug: string,
+  virtualNetworkId?: string,
+): CatalogNetworkResourceOption[] {
+  const subnets = getTenantSubnets(slug)
+  const scoped = virtualNetworkId
+    ? subnets.filter((subnet) => subnet.virtualNetworkId === virtualNetworkId)
+    : subnets
+  return (scoped.length > 0 ? scoped : subnets).map(toCatalogNetworkOption)
+}
+
+export function getTenantSecurityGroupOptions(
+  slug: string,
+): CatalogNetworkResourceOption[] {
+  return getTenantSecurityGroups(slug).map(toCatalogNetworkOption)
+}
+
+export function getTenantExternalIpPoolOptions(
+  slug: string,
+): CatalogNetworkResourceOption[] {
+  return getTenantExternalIpPools(slug).map(toExternalIpPoolCatalogOption)
+}
+
+function isExternalIp(value: unknown): value is ExternalIp {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const record = value as Partial<ExternalIp>
+  return (
+    typeof record.id === 'string' &&
+    typeof record.address === 'string' &&
+    (record.family === 'IPv4' || record.family === 'IPv6') &&
+    (record.status === 'In use' || record.status === 'Available') &&
+    (record.poolId === null || typeof record.poolId === 'string') &&
+    (record.poolName === null || typeof record.poolName === 'string') &&
+    typeof record.attachedTo === 'string'
+  )
+}
+
+function getDefaultTenantExternalIps(slug: string): ExternalIp[] {
+  return slug === 'northsummit' || slug === 'northstar'
+    ? cloneDefaults(DEFAULT_NORTHSUMMIT_EXTERNAL_IPS)
+    : []
+}
+
+function isNorthsummitDemoExternalIp(item: ExternalIp): boolean {
+  return item.id.startsWith('eip-northsummit-')
+}
+
+function syncDefaultTenantExternalIps(slug: string, items: ExternalIp[]): ExternalIp[] {
+  const defaults = getDefaultTenantExternalIps(slug)
+  if (defaults.length === 0) {
+    return items
+  }
+
+  const userCreated = items.filter((item) => !isNorthsummitDemoExternalIp(item))
+  const merged = [...defaults, ...userCreated]
+
+  const unchanged =
+    merged.length === items.length &&
+    merged.every(
+      (item, index) =>
+        item.id === items[index]?.id &&
+        item.address === items[index]?.address &&
+        item.status === items[index]?.status &&
+        item.attachedTo === items[index]?.attachedTo,
+    )
+
+  if (unchanged) {
+    return items
+  }
+
+  writeJsonArray(tenantKey(TENANT_EXTERNAL_IPS_KEY_PREFIX, slug), merged)
+  return merged
+}
+
+export function getTenantExternalIps(slug: string): ExternalIp[] {
+  const fallback = getDefaultTenantExternalIps(slug)
+  const items = readJsonArray(
+    tenantKey(TENANT_EXTERNAL_IPS_KEY_PREFIX, slug),
+    fallback,
+    isExternalIp,
+  )
+
+  return syncDefaultTenantExternalIps(slug, items)
+}
+
+export function setTenantExternalIps(slug: string, ips: ExternalIp[]): void {
+  writeJsonArray(tenantKey(TENANT_EXTERNAL_IPS_KEY_PREFIX, slug), ips)
+}
+
+export function addTenantExternalIp(slug: string, ip: ExternalIp): void {
+  setTenantExternalIps(slug, [ip, ...getTenantExternalIps(slug)])
+}
+
+export function removeTenantExternalIp(slug: string, ipId: string): void {
+  setTenantExternalIps(
+    slug,
+    getTenantExternalIps(slug).filter((ip) => ip.id !== ipId),
+  )
+}

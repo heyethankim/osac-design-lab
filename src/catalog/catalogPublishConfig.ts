@@ -1,0 +1,1084 @@
+import type { CatalogServiceId } from '../providerSetup/templateDemo'
+import type { SavedMasterTemplate } from '../providerSetup/templateDemo'
+import { DISCOVERED_HARDWARE_PROFILES } from '../providerSetup/templateDemo'
+
+export type CatalogFieldPolicyMode = 'locked' | 'exposed'
+
+export type CatalogFieldPolicyCategory = 'hardware' | 'os' | 'template-param'
+
+export type CatalogFieldPolicy = {
+  id: string
+  key?: string
+  label: string
+  category?: CatalogFieldPolicyCategory
+  defaultValue: string
+  mode: CatalogFieldPolicyMode
+}
+
+export type CatalogInstanceTypeOption = {
+  id: string
+  label: string
+  detail: string
+  hourlyRate?: string
+  accelerator?: string
+}
+
+/** Preset card id for a manually defined instance type (Bare metal / VM). */
+export const CUSTOM_INSTANCE_TYPE_ID = 'custom'
+
+export type CustomInstanceTypeConfig = {
+  vcpus: number
+  memoryGb: number
+  networkInterfaces: number
+  /** Matches `CATALOG_GPU_ACCELERATOR_OPTIONS` id; `none` means no GPU. */
+  acceleratorId: string
+}
+
+export const DEFAULT_CUSTOM_INSTANCE_TYPE_CONFIG: CustomInstanceTypeConfig = {
+  vcpus: 32,
+  memoryGb: 256,
+  networkInterfaces: 2,
+  acceleratorId: 'nvidia-a100-40',
+}
+
+/** Lighter Custom defaults when creating a virtual machine catalog item. */
+export const DEFAULT_VM_CUSTOM_INSTANCE_TYPE_CONFIG: CustomInstanceTypeConfig = {
+  vcpus: 4,
+  memoryGb: 16,
+  networkInterfaces: 1,
+  acceleratorId: 'none',
+}
+
+export function getDefaultCustomInstanceTypeConfig(
+  serviceId: CatalogServiceId | null,
+): CustomInstanceTypeConfig {
+  return serviceId === 'virtual-machine'
+    ? { ...DEFAULT_VM_CUSTOM_INSTANCE_TYPE_CONFIG }
+    : { ...DEFAULT_CUSTOM_INSTANCE_TYPE_CONFIG }
+}
+
+export const CATALOG_GPU_ACCELERATOR_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: 'none', label: 'None' },
+  { id: 'nvidia-a100-40', label: 'NVIDIA A100 40 GB' },
+  { id: 'nvidia-a100-80', label: 'NVIDIA A100 80 GB' },
+  { id: 'nvidia-h100-80', label: 'NVIDIA H100 80 GB' },
+  { id: 'nvidia-l40s', label: 'NVIDIA L40S 48 GB' },
+]
+
+export function isCustomInstanceTypeId(instanceTypeId: string): boolean {
+  return instanceTypeId === CUSTOM_INSTANCE_TYPE_ID
+}
+
+export function getCustomInstanceTypeAcceleratorLabel(acceleratorId: string): string | undefined {
+  if (!acceleratorId || acceleratorId === 'none') {
+    return undefined
+  }
+
+  return CATALOG_GPU_ACCELERATOR_OPTIONS.find((option) => option.id === acceleratorId)?.label
+}
+
+export function formatCustomInstanceTypeDetail(config: CustomInstanceTypeConfig): string {
+  const nicLabel =
+    config.networkInterfaces === 1 ? '1 NIC' : `${config.networkInterfaces} NICs`
+  return [`${config.vcpus} vCPU`, `${config.memoryGb} GB`, nicLabel].join(' · ')
+}
+
+export function formatCustomInstanceTypeLabel(config: CustomInstanceTypeConfig): string {
+  const detail = formatCustomInstanceTypeDetail(config)
+  const accelerator = getCustomInstanceTypeAcceleratorLabel(config.acceleratorId)
+  return accelerator ? `Custom (${detail} · ${accelerator})` : `Custom (${detail})`
+}
+
+/** Demo rates aligned to Small/Medium/Large presets ($0.06/vCPU + $0.015/GB). */
+const CUSTOM_INSTANCE_RATE_PER_VCPU = 0.06
+const CUSTOM_INSTANCE_RATE_PER_GB = 0.015
+const CUSTOM_INSTANCE_RATE_PER_NIC = 0.02
+const CUSTOM_INSTANCE_GPU_RATE: Readonly<Record<string, number>> = {
+  none: 0,
+  'nvidia-a100-40': 2.8,
+  'nvidia-a100-80': 3.6,
+  'nvidia-h100-80': 4.5,
+  'nvidia-l40s': 1.75,
+}
+
+export function calculateCustomInstanceHourlyRate(config: CustomInstanceTypeConfig): number {
+  const gpuRate = CUSTOM_INSTANCE_GPU_RATE[config.acceleratorId] ?? 0
+  return (
+    config.vcpus * CUSTOM_INSTANCE_RATE_PER_VCPU +
+    config.memoryGb * CUSTOM_INSTANCE_RATE_PER_GB +
+    config.networkInterfaces * CUSTOM_INSTANCE_RATE_PER_NIC +
+    gpuRate
+  )
+}
+
+export function formatCustomInstanceHourlyRate(config: CustomInstanceTypeConfig): string {
+  return `$${calculateCustomInstanceHourlyRate(config).toFixed(2)}/hr`
+}
+
+export function buildCustomInstanceTypeOption(
+  config: CustomInstanceTypeConfig,
+): CatalogInstanceTypeOption {
+  const accelerator = getCustomInstanceTypeAcceleratorLabel(config.acceleratorId)
+  return {
+    id: CUSTOM_INSTANCE_TYPE_ID,
+    label: 'Custom',
+    detail: formatCustomInstanceTypeDetail(config),
+    hourlyRate: formatCustomInstanceHourlyRate(config),
+    ...(accelerator ? { accelerator } : {}),
+  }
+}
+
+export function isValidCustomInstanceTypeConfig(config: CustomInstanceTypeConfig): boolean {
+  return (
+    Number.isFinite(config.vcpus) &&
+    config.vcpus >= 1 &&
+    Number.isFinite(config.memoryGb) &&
+    config.memoryGb >= 1 &&
+    Number.isFinite(config.networkInterfaces) &&
+    config.networkInterfaces >= 1
+  )
+}
+
+export type CatalogDiskImageOption = {
+  id: string
+  label: string
+  detail: string
+}
+
+/** Support lifecycle shown when choosing a cluster version in the publish wizard. */
+export type CatalogClusterVersionLifecycle = 'active' | 'deprecated'
+
+/**
+ * Whether tenants can change OpenShift version when provisioning from this catalog item.
+ * Defaults to locked when omitted (legacy catalog items).
+ */
+export type CatalogClusterVersionMode = 'locked' | 'editable'
+
+export function getCatalogClusterVersionModeLabel(mode: CatalogClusterVersionMode): string {
+  return mode === 'editable' ? 'Editable' : 'Locked'
+}
+
+export function resolveCatalogClusterVersionMode(
+  mode: CatalogClusterVersionMode | undefined | null,
+): CatalogClusterVersionMode {
+  return mode === 'editable' ? 'editable' : 'locked'
+}
+
+/**
+ * Bare metal Hardware: whether tenants can change instance type at launch.
+ * Defaults to locked when omitted (legacy catalog items).
+ */
+export type CatalogHardwareOsMode = 'locked' | 'editable'
+
+/**
+ * Bare metal OS: whether tenants can change disk image at launch.
+ * Defaults to locked when omitted (legacy catalog items fall back to hardwareOsMode).
+ */
+export type CatalogOsImageMode = CatalogHardwareOsMode
+
+export function getCatalogHardwareOsModeLabel(mode: CatalogHardwareOsMode): string {
+  return mode === 'editable' ? 'Editable' : 'Locked'
+}
+
+export function resolveCatalogHardwareOsMode(
+  mode: CatalogHardwareOsMode | undefined | null,
+): CatalogHardwareOsMode {
+  return mode === 'editable' ? 'editable' : 'locked'
+}
+
+export function getCatalogOsImageModeLabel(mode: CatalogOsImageMode): string {
+  return getCatalogHardwareOsModeLabel(mode)
+}
+
+export function resolveCatalogOsImageMode(
+  mode: CatalogOsImageMode | undefined | null,
+  hardwareFallback?: CatalogHardwareOsMode | undefined | null,
+): CatalogOsImageMode {
+  if (mode === 'editable' || mode === 'locked') {
+    return mode
+  }
+  return resolveCatalogHardwareOsMode(hardwareFallback)
+}
+
+/**
+ * Whether tenants can change default node set / host type when provisioning.
+ * Defaults to locked when omitted (legacy catalog items).
+ */
+export type CatalogClusterNodeTopologyMode = 'locked' | 'editable'
+
+export function getCatalogClusterNodeTopologyModeLabel(
+  mode: CatalogClusterNodeTopologyMode,
+): string {
+  return mode === 'editable' ? 'Editable' : 'Locked'
+}
+
+export function resolveCatalogClusterNodeTopologyMode(
+  mode: CatalogClusterNodeTopologyMode | undefined | null,
+): CatalogClusterNodeTopologyMode {
+  return mode === 'editable' ? 'editable' : 'locked'
+}
+
+/** Default worker node set advertised on a Cluster catalog item. */
+export type CatalogClusterNodeSetOption = {
+  id: string
+  label: string
+  detail: string
+  /** Default worker count used for estimated catalog pricing. */
+  defaultWorkerCount: number
+}
+
+/** Host type options for the default node set. */
+export type CatalogClusterHostTypeOption = {
+  id: string
+  label: string
+  detail: string
+}
+
+export const CATALOG_CLUSTER_NODE_SET_OPTIONS: ReadonlyArray<CatalogClusterNodeSetOption> = [
+  {
+    id: 'fc430-worker',
+    label: 'Worker pool',
+    detail: '3 workers · size 1–4',
+    defaultWorkerCount: 3,
+  },
+  {
+    id: 'fc430-infra',
+    label: 'Infra pool',
+    detail: '2 workers · routers & monitoring',
+    defaultWorkerCount: 2,
+  },
+  {
+    id: 'fc430-gpu',
+    label: 'GPU pool',
+    detail: '2 workers · AI workloads',
+    defaultWorkerCount: 2,
+  },
+]
+
+export const CATALOG_CLUSTER_HOST_TYPE_OPTIONS: ReadonlyArray<CatalogClusterHostTypeOption> = [
+  {
+    id: 'standard-host',
+    label: 'standard-host',
+    detail: 'CPU-balanced',
+  },
+  {
+    id: 'gpu-host',
+    label: 'gpu-host',
+    detail: 'GPU-capable',
+  },
+  {
+    id: 'storage-host',
+    label: 'storage-host',
+    detail: 'High-capacity storage',
+  },
+]
+
+/**
+ * Machine types shown in the cluster Node topology editor.
+ * Maps to host type (catalog persistence) and bare-metal flavor (M360 rates).
+ */
+export type CatalogClusterMachineTypeOption = {
+  id: string
+  label: string
+  detail: string
+  hostTypeId: string
+  bareMetalInstanceTypeId: string
+}
+
+export const CATALOG_CLUSTER_MACHINE_TYPE_OPTIONS: ReadonlyArray<CatalogClusterMachineTypeOption> =
+  [
+    {
+      id: 'bm-cpu-32c',
+      label: 'bm-cpu-32c',
+      detail: '32 vCPU · 128 GB RAM',
+      hostTypeId: 'standard-host',
+      bareMetalInstanceTypeId: 'small',
+    },
+    {
+      id: 'bm-cpu-64c',
+      label: 'bm-cpu-64c',
+      detail: '64 vCPU · 256 GB RAM',
+      hostTypeId: 'standard-host',
+      bareMetalInstanceTypeId: 'medium',
+    },
+    {
+      id: 'bm-gpu-h100',
+      label: 'bm-gpu-h100',
+      detail: '8 x H100 GPU · 1 TB RAM',
+      hostTypeId: 'gpu-host',
+      bareMetalInstanceTypeId: 'large',
+    },
+  ]
+
+export const DEFAULT_CLUSTER_NODE_SET_ID = 'fc430-worker'
+export const DEFAULT_CLUSTER_HOST_TYPE_ID = 'standard-host'
+export const DEFAULT_CLUSTER_MACHINE_TYPE_ID = 'bm-cpu-64c'
+export const MAX_CLUSTER_TOPOLOGY_NODE_SETS = 6
+/** Demo baseline: Control plane, Workers, and GPU workers. */
+export const MIN_CLUSTER_TOPOLOGY_NODE_SETS = 3
+export const MIN_CLUSTER_NODE_COUNT = 1
+export const MAX_CLUSTER_NODE_COUNT = 20
+
+/** Persisted Node topology rows on a Cluster catalog item. */
+export type CatalogClusterTopologyNodeSet = {
+  name: string
+  machineTypeId: string
+  nodeCount: number
+}
+
+/** Demo defaults shown in the publish wizard and on cluster detail. */
+export const DEFAULT_CLUSTER_TOPOLOGY_NODE_SETS: ReadonlyArray<CatalogClusterTopologyNodeSet> = [
+  { name: 'control-plane', machineTypeId: 'bm-cpu-64c', nodeCount: 3 },
+  { name: 'workers', machineTypeId: 'bm-cpu-32c', nodeCount: 5 },
+  { name: 'gpu-workers', machineTypeId: 'bm-gpu-h100', nodeCount: 2 },
+]
+
+function normalizeCatalogClusterTopologyNodeSet(
+  row: Partial<CatalogClusterTopologyNodeSet> | null | undefined,
+  fallback: CatalogClusterTopologyNodeSet = DEFAULT_CLUSTER_TOPOLOGY_NODE_SETS[0],
+): CatalogClusterTopologyNodeSet {
+  const machineTypeId =
+    getCatalogClusterMachineTypeOption(row?.machineTypeId)?.id ??
+    fallback.machineTypeId
+  const parsedCount = Number(row?.nodeCount)
+  const nodeCount =
+    Number.isFinite(parsedCount) && parsedCount >= MIN_CLUSTER_NODE_COUNT
+      ? Math.min(MAX_CLUSTER_NODE_COUNT, Math.floor(parsedCount))
+      : fallback.nodeCount
+  const name = row?.name?.trim() || fallback.name
+  return { name, machineTypeId, nodeCount }
+}
+
+/** Prefer stored topology; fall back to the three demo node sets. */
+export function resolveCatalogClusterTopology(
+  topology: ReadonlyArray<Partial<CatalogClusterTopologyNodeSet>> | undefined | null,
+): CatalogClusterTopologyNodeSet[] {
+  if (!topology?.length) {
+    return DEFAULT_CLUSTER_TOPOLOGY_NODE_SETS.map((row) => ({ ...row }))
+  }
+  return topology.map((row, index) =>
+    normalizeCatalogClusterTopologyNodeSet(
+      row,
+      DEFAULT_CLUSTER_TOPOLOGY_NODE_SETS[index] ?? DEFAULT_CLUSTER_TOPOLOGY_NODE_SETS[0],
+    ),
+  )
+}
+
+export function formatClusterTopologyNodeSetValue(
+  nodeSet: CatalogClusterTopologyNodeSet,
+  options?: { compact?: boolean },
+): string {
+  const machineLabel = options?.compact
+    ? getCatalogClusterMachineTypeOption(nodeSet.machineTypeId)?.label ??
+      nodeSet.machineTypeId
+    : formatClusterMachineTypeLabel(nodeSet.machineTypeId)
+  const nodeLabel = `${nodeSet.nodeCount} ${nodeSet.nodeCount === 1 ? 'node' : 'nodes'}`
+  return `${machineLabel} · ${nodeLabel}`
+}
+
+export function serializeCatalogClusterTopology(
+  topology: ReadonlyArray<CatalogClusterTopologyNodeSet>,
+): string {
+  return resolveCatalogClusterTopology(topology)
+    .map((row) => `${row.name}|${row.machineTypeId}|${row.nodeCount}`)
+    .join(';')
+}
+
+export function getCatalogClusterNodeSetOptions(): CatalogClusterNodeSetOption[] {
+  return [...CATALOG_CLUSTER_NODE_SET_OPTIONS]
+}
+
+export function getCatalogClusterHostTypeOptions(): CatalogClusterHostTypeOption[] {
+  return [...CATALOG_CLUSTER_HOST_TYPE_OPTIONS]
+}
+
+export function getCatalogClusterMachineTypeOptions(): CatalogClusterMachineTypeOption[] {
+  return [...CATALOG_CLUSTER_MACHINE_TYPE_OPTIONS]
+}
+
+export function getCatalogClusterMachineTypeOption(
+  idOrLabel: string | undefined | null,
+): CatalogClusterMachineTypeOption | undefined {
+  const needle = idOrLabel?.trim()
+  if (!needle) {
+    return undefined
+  }
+  return CATALOG_CLUSTER_MACHINE_TYPE_OPTIONS.find(
+    (option) => option.id === needle || option.label === needle,
+  )
+}
+
+export function formatClusterMachineTypeLabel(idOrLabel: string | undefined | null): string {
+  const option = getCatalogClusterMachineTypeOption(idOrLabel)
+  if (!option) {
+    return idOrLabel?.trim() || CATALOG_CLUSTER_MACHINE_TYPE_OPTIONS[0].label
+  }
+  return `${option.label} · ${option.detail}`
+}
+
+export function resolveClusterMachineTypeIdFromHostType(
+  hostTypeId: string | undefined | null,
+): string {
+  const normalized = hostTypeId?.trim()
+  if (!normalized) {
+    return DEFAULT_CLUSTER_MACHINE_TYPE_ID
+  }
+  return (
+    CATALOG_CLUSTER_MACHINE_TYPE_OPTIONS.find((option) => option.hostTypeId === normalized)?.id ??
+    DEFAULT_CLUSTER_MACHINE_TYPE_ID
+  )
+}
+
+/** Prefer a named worker pool for catalog card defaults; fall back to the first row. */
+export function pickPrimaryClusterTopologyRowIndex(
+  rows: ReadonlyArray<{ name: string }>,
+): number {
+  const workersIndex = rows.findIndex((row) => {
+    const name = row.name.trim().toLowerCase()
+    return name.includes('worker') && !name.includes('gpu')
+  })
+  if (workersIndex >= 0) {
+    return workersIndex
+  }
+  const anyWorker = rows.findIndex((row) => row.name.trim().toLowerCase().includes('worker'))
+  return anyWorker >= 0 ? anyWorker : 0
+}
+
+export function deriveClusterNodeSetIdFromName(name: string | undefined | null): string {
+  const normalized = name?.trim().toLowerCase() ?? ''
+  if (normalized.includes('gpu')) {
+    return 'fc430-gpu'
+  }
+  if (normalized.includes('infra')) {
+    return 'fc430-infra'
+  }
+  return DEFAULT_CLUSTER_NODE_SET_ID
+}
+
+export function getCatalogClusterNodeSetOption(
+  idOrLabel: string | undefined | null,
+): CatalogClusterNodeSetOption | undefined {
+  const needle = idOrLabel?.trim()
+  if (!needle) {
+    return undefined
+  }
+  return CATALOG_CLUSTER_NODE_SET_OPTIONS.find(
+    (option) =>
+      option.id === needle ||
+      option.label === needle ||
+      option.label.toLowerCase() === needle.toLowerCase(),
+  )
+}
+
+export function getCatalogClusterHostTypeOption(
+  idOrLabel: string | undefined | null,
+): CatalogClusterHostTypeOption | undefined {
+  const needle = idOrLabel?.trim()
+  if (!needle) {
+    return undefined
+  }
+  return CATALOG_CLUSTER_HOST_TYPE_OPTIONS.find(
+    (option) =>
+      option.id === needle ||
+      option.label === needle ||
+      option.label.toLowerCase() === needle.toLowerCase(),
+  )
+}
+
+export function formatClusterNodeSetLabel(idOrLabel: string | undefined | null): string {
+  return (
+    getCatalogClusterNodeSetOption(idOrLabel)?.label ??
+    idOrLabel?.trim() ??
+    CATALOG_CLUSTER_NODE_SET_OPTIONS[0].label
+  )
+}
+
+export function formatClusterHostTypeLabel(idOrLabel: string | undefined | null): string {
+  return (
+    getCatalogClusterHostTypeOption(idOrLabel)?.label ??
+    idOrLabel?.trim() ??
+    CATALOG_CLUSTER_HOST_TYPE_OPTIONS[0].label
+  )
+}
+
+/** OpenShift version advertised on a Cluster as a Service catalog item. */
+export type CatalogClusterVersionOption = {
+  id: string
+  label: string
+  detail: string
+  releaseImage: string
+  lifecycle: CatalogClusterVersionLifecycle
+  /** Demo highlights shown when the version card is expanded in the publish wizard. */
+  features: readonly string[]
+}
+
+export function getCatalogClusterVersionLifecycleMeta(
+  lifecycle: CatalogClusterVersionLifecycle,
+): { color: 'green' | 'orange'; text: string } {
+  switch (lifecycle) {
+    case 'active':
+      return { color: 'green', text: 'Active' }
+    case 'deprecated':
+      return { color: 'orange', text: 'Deprecated' }
+  }
+}
+
+/** Present provisioning templates as the "how", not the hardware SKU. */
+export type CatalogProvisioningParameter = {
+  name: string
+  description: string
+}
+
+export type CatalogProvisioningPresentation = {
+  title: string
+  description: string
+  parameters: CatalogProvisioningParameter[]
+}
+
+function isGpuProvisioningTemplate(template: SavedMasterTemplate): boolean {
+  const hardwareProfile = DISCOVERED_HARDWARE_PROFILES.find(
+    (profile) => profile.id === template.hardwareProfileId,
+  )
+  return (
+    hardwareProfile?.category === 'gpu-ai' || /passthrough/i.test(template.templateName)
+  )
+}
+
+/**
+ * Demo templates do not expose extra tenant-facing parameters beyond instance type
+ * and disk image. Keep `parameters` empty unless you can defend each knob in a demo.
+ */
+function getBareMetalProvisioningPresentation(
+  isGpu: boolean,
+): CatalogProvisioningPresentation {
+  if (isGpu) {
+    return {
+      title: 'gpu-bare-metal-template',
+      description:
+        'Provisions GPU bare metal hosts using the Metal3 Baremetal Operator, including BMC power control and OS imaging for AI training fleets.',
+      parameters: [],
+    }
+  }
+
+  return {
+    title: 'standard-bare-metal-template',
+    description:
+      'Provisions bare metal hosts using the Metal3 Baremetal Operator, including BMC power control and OS imaging for standard compute workloads.',
+    parameters: [],
+  }
+}
+
+function getVirtualMachineProvisioningPresentation(
+  isGpu: boolean,
+): CatalogProvisioningPresentation {
+  if (isGpu) {
+    return {
+      title: 'gpu-passthrough-template',
+      description:
+        'Provisions VMs with dedicated GPU passthrough via VFIO binding on GPU-capable hosts.',
+      parameters: [],
+    }
+  }
+
+  return {
+    title: 'standard-vm-template',
+    description:
+      'Provisions virtual machines using the core Ansible role, including networking, storage, and cloud-init seeding.',
+    parameters: [],
+  }
+}
+
+function getClusterProvisioningPresentation(
+  isGpu: boolean,
+): CatalogProvisioningPresentation {
+  if (isGpu) {
+    return {
+      title: 'gpu-cluster-template',
+      description:
+        'Provisions OpenShift clusters with GPU worker pools and installs the GPU operator stack after bootstrap.',
+      parameters: [],
+    }
+  }
+
+  return {
+    title: 'standard-cluster-template',
+    description:
+      'Provisions OpenShift clusters using the Assisted Installer / Hive path, including control-plane bootstrap and worker join.',
+    parameters: [],
+  }
+}
+
+function getModelProvisioningPresentation(
+  isGpu: boolean,
+): CatalogProvisioningPresentation {
+  if (isGpu) {
+    return {
+      title: 'gpu-model-serving-template',
+      description:
+        'Deploys model-serving runtimes on GPU-backed capacity, including accelerator scheduling and model artifact pull.',
+      parameters: [],
+    }
+  }
+
+  return {
+    title: 'standard-model-serving-template',
+    description:
+      'Deploys model-serving runtimes on CPU capacity, including runtime image pull, endpoint exposure, and health probes.',
+    parameters: [],
+  }
+}
+
+export function getProvisioningTemplatePresentation(
+  template: SavedMasterTemplate,
+  serviceId: CatalogServiceId | null = 'virtual-machine',
+): CatalogProvisioningPresentation {
+  const isGpu = isGpuProvisioningTemplate(template)
+
+  if (serviceId === 'baremetal') {
+    return getBareMetalProvisioningPresentation(isGpu)
+  }
+  if (serviceId === 'cluster') {
+    if (template.templateRefId.startsWith('cl-') && template.templateName.trim()) {
+      return {
+        title: template.templateName,
+        description:
+          template.description.trim() || getClusterProvisioningPresentation(isGpu).description,
+        parameters: [],
+      }
+    }
+    return getClusterProvisioningPresentation(isGpu)
+  }
+  if (serviceId === 'models') {
+    return getModelProvisioningPresentation(isGpu)
+  }
+
+  return getVirtualMachineProvisioningPresentation(isGpu)
+}
+
+export const CATALOG_INSTANCE_TYPE_OPTIONS: ReadonlyArray<CatalogInstanceTypeOption> = [
+  {
+    id: 'small',
+    label: 'Small',
+    detail: '16 vCPU · 128 GB',
+    accelerator: 'NVIDIA A100 40 GB',
+    hourlyRate: '$5.68/hr',
+  },
+  {
+    id: 'medium',
+    label: 'Medium',
+    detail: '32 vCPU · 256 GB',
+    accelerator: 'NVIDIA A100 40 GB',
+    hourlyRate: '$8.56/hr',
+  },
+  {
+    id: 'large',
+    label: 'Large',
+    detail: '64 vCPU · 512 GB',
+    accelerator: 'NVIDIA A100 80 GB',
+    hourlyRate: '$15.12/hr',
+  },
+]
+
+export function formatBaremetalInstanceTypeLabel(instanceTypeId: string): string | undefined {
+  const option = CATALOG_INSTANCE_TYPE_OPTIONS.find((item) => item.id === instanceTypeId)
+  if (!option) {
+    return undefined
+  }
+
+  return option.accelerator
+    ? `${option.label} (${option.detail} · ${option.accelerator})`
+    : `${option.label} (${option.detail})`
+}
+
+export type BaremetalInstanceTypeHardware = {
+  sizeLabel: string
+  cpu: string
+  ram: string
+  gpu: string
+}
+
+function parseBaremetalDetailParts(detail: string): { cpu: string; ram: string } {
+  const parts = detail
+    .split(' · ')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const cpu = parts.find((part) => /vCPU/i.test(part)) ?? '—'
+  const ram =
+    parts.find((part) => /\d+\s*GB\b/i.test(part) && !/vCPU/i.test(part)) ?? '—'
+
+  return { cpu, ram }
+}
+
+export function resolveBaremetalInstanceTypeId(
+  instanceTypeId?: string,
+  instanceTypeLabel?: string,
+): string | undefined {
+  if (instanceTypeId?.trim()) {
+    const id = instanceTypeId.trim().toLowerCase()
+    if (CATALOG_INSTANCE_TYPE_OPTIONS.some((option) => option.id === id)) {
+      return id
+    }
+  }
+
+  if (instanceTypeLabel?.trim()) {
+    const prefix = instanceTypeLabel.trim().match(/^([^(]+)/)?.[1]?.trim() ?? ''
+    const byLabel = CATALOG_INSTANCE_TYPE_OPTIONS.find((option) => option.label === prefix)
+    if (byLabel) {
+      return byLabel.id
+    }
+  }
+
+  return undefined
+}
+
+export function resolveBaremetalInstanceTypeHardware(
+  instanceTypeId?: string,
+  instanceTypeLabel?: string,
+): BaremetalInstanceTypeHardware | undefined {
+  const resolvedId = resolveBaremetalInstanceTypeId(instanceTypeId, instanceTypeLabel)
+  if (!resolvedId) {
+    return undefined
+  }
+
+  const option = CATALOG_INSTANCE_TYPE_OPTIONS.find((item) => item.id === resolvedId)
+  if (!option) {
+    return undefined
+  }
+
+  const { cpu, ram } = parseBaremetalDetailParts(option.detail)
+  return {
+    sizeLabel: option.label,
+    cpu,
+    ram,
+    gpu: option.accelerator ?? 'None',
+  }
+}
+
+export function resolveBaremetalInstanceTypeHardwareFromSizeLabel(
+  sizeLabel: string,
+): BaremetalInstanceTypeHardware | undefined {
+  const option = CATALOG_INSTANCE_TYPE_OPTIONS.find(
+    (item) => item.label === sizeLabel.trim(),
+  )
+  if (!option) {
+    return undefined
+  }
+
+  return resolveBaremetalInstanceTypeHardware(option.id)
+}
+
+/** CPU/memory-only presets for virtual machine catalog items. */
+export const CATALOG_VM_INSTANCE_TYPE_OPTIONS: ReadonlyArray<CatalogInstanceTypeOption> = [
+  { id: 'small', label: 'Small', detail: '4 vCPU · 16 GB', hourlyRate: '$0.48/hr' },
+  { id: 'medium', label: 'Medium', detail: '8 vCPU · 32 GB', hourlyRate: '$0.96/hr' },
+  { id: 'large', label: 'Large', detail: '16 vCPU · 64 GB', hourlyRate: '$1.92/hr' },
+]
+
+export const CATALOG_DISK_IMAGE_OPTIONS: ReadonlyArray<CatalogDiskImageOption> = [
+  {
+    id: 'rhel-10',
+    label: 'RHEL 10',
+    detail: 'Red Hat Enterprise Linux · x86_64',
+  },
+  {
+    id: 'rhel-9.4',
+    label: 'RHEL 9.4',
+    detail: 'Red Hat Enterprise Linux · x86_64',
+  },
+  {
+    id: 'ubuntu-22.04',
+    label: 'Ubuntu 22.04 LTS',
+    detail: 'Ubuntu · x86_64',
+  },
+  {
+    id: 'rocky-9.3',
+    label: 'Rocky Linux 9.3',
+    detail: 'Rocky Linux · x86_64',
+  },
+]
+
+export function getCatalogInstanceTypeOptions(
+  serviceId: CatalogServiceId | null,
+): CatalogInstanceTypeOption[] {
+  if (serviceId === 'cluster') {
+    return [
+      { id: 'ocp-small', label: 'OpenShift small', detail: '3 control plane · 3 workers' },
+      { id: 'ocp-medium', label: 'OpenShift medium', detail: '3 control plane · 6 workers' },
+      { id: 'ocp-gpu', label: 'OpenShift GPU', detail: '3 control plane · 2 GPU workers' },
+    ]
+  }
+
+  if (serviceId === 'models') {
+    return [
+      { id: 'model-small', label: 'Inference small', detail: '2 vCPU · 8 GiB · 1 replica' },
+      { id: 'model-medium', label: 'Inference medium', detail: '4 vCPU · 16 GiB · 2 replicas' },
+    ]
+  }
+
+  const presets =
+    serviceId === 'virtual-machine'
+      ? CATALOG_VM_INSTANCE_TYPE_OPTIONS
+      : CATALOG_INSTANCE_TYPE_OPTIONS
+
+  // Bare metal and models-style presets only — Custom is VM-only.
+  if (serviceId === 'virtual-machine') {
+    return [
+      ...presets,
+      {
+        id: CUSTOM_INSTANCE_TYPE_ID,
+        label: 'Custom',
+        detail: 'Set CPUs, memory, NICs, and GPUs',
+      },
+    ]
+  }
+
+  return [...presets]
+}
+
+export function getCatalogDiskImageOptions(): CatalogDiskImageOption[] {
+  return [...CATALOG_DISK_IMAGE_OPTIONS]
+}
+
+/** Tenant-facing disk image label (e.g. RHEL 9.4, not Red Hat Enterprise Linux 9.4). */
+export function normalizeCatalogDiskImageDisplayLabel(label: string): string {
+  const trimmed = label.trim()
+  if (!trimmed) {
+    return trimmed
+  }
+
+  const byOptionLabel = CATALOG_DISK_IMAGE_OPTIONS.find((option) => option.label === trimmed)
+  if (byOptionLabel) {
+    return byOptionLabel.label
+  }
+
+  const byOptionId = CATALOG_DISK_IMAGE_OPTIONS.find((option) => option.id === trimmed)
+  if (byOptionId) {
+    return byOptionId.label
+  }
+
+  const rhelMatch = trimmed.match(/^Red Hat Enterprise Linux\s+(.+)$/i)
+  if (rhelMatch) {
+    const version = rhelMatch[1].trim()
+    const byVersion = CATALOG_DISK_IMAGE_OPTIONS.find(
+      (option) => option.id === `rhel-${version}` || option.label === `RHEL ${version}`,
+    )
+    return byVersion?.label ?? `RHEL ${version}`
+  }
+
+  return trimmed
+}
+
+export function formatCatalogDiskImageLabel(
+  diskImageId?: string,
+  diskImageLabel?: string,
+): string | undefined {
+  if (diskImageId?.trim()) {
+    const byId = CATALOG_DISK_IMAGE_OPTIONS.find((option) => option.id === diskImageId.trim())
+    if (byId) {
+      return byId.label
+    }
+  }
+
+  if (diskImageLabel?.trim()) {
+    return normalizeCatalogDiskImageDisplayLabel(diskImageLabel)
+  }
+
+  return undefined
+}
+
+/** RHEL and other Red Hat OS images show the brand mark on catalog detail pages. */
+export function isRedHatBrandedDiskImageLabel(label: string): boolean {
+  const trimmed = label.trim()
+  if (!trimmed) {
+    return false
+  }
+
+  if (/^Red Hat\b/i.test(trimmed) || /^RHEL\b/i.test(trimmed)) {
+    return true
+  }
+
+  return CATALOG_DISK_IMAGE_OPTIONS.some(
+    (option) => option.id.startsWith('rhel-') && option.label === trimmed,
+  )
+}
+
+export const CATALOG_CLUSTER_VERSION_OPTIONS: ReadonlyArray<CatalogClusterVersionOption> = [
+  {
+    id: 'ocp-4.21',
+    label: 'OpenShift 4.21',
+    detail: 'Newest stream · GPU scheduling and Node Sets defaults',
+    releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.21.0-multi',
+    lifecycle: 'active',
+    features: [
+      'Latest Node Sets defaults for Cluster as a Service',
+      'Enhanced GPU scheduling for AI training fleets',
+      'Multi-arch control plane (x86_64 and aarch64)',
+      'Newest platform operators and certified catalog',
+    ],
+  },
+  {
+    id: 'ocp-4.20',
+    label: 'OpenShift 4.20',
+    detail: 'Current stable · improved bare-metal installer path',
+    releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.20.0-multi',
+    lifecycle: 'active',
+    features: [
+      'Stable Node Sets provisioning path',
+      'Improved bare-metal installer hooks',
+      'Multi-arch release image',
+      'Full operator catalog compatibility',
+    ],
+  },
+  {
+    id: 'ocp-4.19',
+    label: 'OpenShift 4.19',
+    detail: 'Catalog default · validated Node Sets and Machine Config',
+    releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.19.0-multi',
+    lifecycle: 'active',
+    features: [
+      'Recommended default for new Cluster as a Service catalogs',
+      'Validated Node Sets and Machine Config defaults',
+      'Multi-arch release image',
+      'Broad operator ecosystem support',
+    ],
+  },
+  {
+    id: 'ocp-4.18',
+    label: 'OpenShift 4.18',
+    detail: 'Long-lived production · mature operators and tenant flows',
+    releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.18.0-multi',
+    lifecycle: 'active',
+    features: [
+      'Long-lived active stream for production catalogs',
+      'Mature bare-metal and virtualization operators',
+      'Multi-arch release image',
+      'Compatible with existing tenant launch flows',
+    ],
+  },
+  {
+    id: 'ocp-4.17',
+    label: 'OpenShift 4.17',
+    detail: 'Maintenance only · prefer upgrade to 4.18 or newer',
+    releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.17.0-multi',
+    lifecycle: 'deprecated',
+    features: [
+      'Maintenance updates only',
+      'Node Sets still supported for existing catalogs',
+      'Prefer upgrade path to 4.18 or newer',
+      'Multi-arch release image',
+    ],
+  },
+  {
+    id: 'ocp-4.16',
+    label: 'OpenShift 4.16',
+    detail: 'Extended life ending · not recommended for new catalogs',
+    releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.16.0-multi',
+    lifecycle: 'deprecated',
+    features: [
+      'Extended life ending soon',
+      'Limited new operator certifications',
+      'Prefer 4.18 or newer for new catalogs',
+      'Multi-arch release image',
+    ],
+  },
+]
+
+export function getCatalogClusterVersionOptions(): CatalogClusterVersionOption[] {
+  return [...CATALOG_CLUSTER_VERSION_OPTIONS]
+}
+
+/** Newest cluster version in the publish wizard (options are ordered newest-first). */
+export function getLatestCatalogClusterVersionId(): string {
+  return CATALOG_CLUSTER_VERSION_OPTIONS[0]?.id ?? ''
+}
+
+/** Default cluster version for seeded Node Sets demo catalog item. */
+export const DEFAULT_CLUSTER_CATALOG_VERSION_ID = 'ocp-4.19'
+
+export function getCatalogClusterVersionOption(
+  idOrLabel: string | undefined | null,
+): CatalogClusterVersionOption | undefined {
+  const needle = idOrLabel?.trim()
+  if (!needle) {
+    return undefined
+  }
+  const normalized = needle.replace(/^Red Hat\s+/i, '')
+  return CATALOG_CLUSTER_VERSION_OPTIONS.find((option) => {
+    const legacyLabel = `Red Hat ${option.label}`
+    return (
+      option.id === needle ||
+      option.label === needle ||
+      option.label === normalized ||
+      option.label.toLowerCase() === needle.toLowerCase() ||
+      option.label.toLowerCase() === normalized.toLowerCase() ||
+      legacyLabel === needle ||
+      legacyLabel.toLowerCase() === needle.toLowerCase()
+    )
+  })
+}
+
+export function getReleaseImageForClusterVersion(idOrLabel: string | undefined | null): string {
+  const needle = idOrLabel?.trim()
+  if (!needle) {
+    return (
+      CATALOG_CLUSTER_VERSION_OPTIONS.find(
+        (option) => option.id === DEFAULT_CLUSTER_CATALOG_VERSION_ID,
+      )?.releaseImage ?? CATALOG_CLUSTER_VERSION_OPTIONS[0].releaseImage
+    )
+  }
+
+  const matched = getCatalogClusterVersionOption(needle)
+  if (matched) {
+    return matched.releaseImage
+  }
+
+  // Already a release image reference (legacy launch form defaults).
+  if (needle.includes('/') || needle.includes(':')) {
+    return needle
+  }
+
+  return (
+    CATALOG_CLUSTER_VERSION_OPTIONS.find(
+      (option) => option.id === DEFAULT_CLUSTER_CATALOG_VERSION_ID,
+    )?.releaseImage ?? CATALOG_CLUSTER_VERSION_OPTIONS[0].releaseImage
+  )
+}
+
+export function formatClusterPlatformLabel(idOrLabel: string | undefined | null): string {
+  const matched = getCatalogClusterVersionOption(idOrLabel)
+  if (matched) {
+    return matched.label
+  }
+
+  const trimmed = idOrLabel?.trim()
+  if (!trimmed) {
+    return 'OpenShift'
+  }
+
+  // Strip legacy "Red Hat OpenShift …" / "Red Hat …" prefixes from stored labels.
+  return trimmed.replace(/^Red Hat\s+/i, '') || 'OpenShift'
+}
+
+function formatTemplateParamLabel(key: string): string {
+  return key
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+export function buildDefaultCatalogFieldPolicies(options: {
+  provisionerParameters?: CatalogProvisioningParameter[]
+}): CatalogFieldPolicy[] {
+  return (options.provisionerParameters ?? []).map((parameter) => ({
+    id: parameter.name,
+    key: parameter.name,
+    label: formatTemplateParamLabel(parameter.name),
+    category: 'template-param' as const,
+    defaultValue: parameter.description,
+    mode: 'locked' as const,
+  }))
+}
+
+export function formatCatalogFieldPolicyMode(mode: CatalogFieldPolicyMode): 'Fixed' | 'Editable' {
+  return mode === 'locked' ? 'Fixed' : 'Editable'
+}
