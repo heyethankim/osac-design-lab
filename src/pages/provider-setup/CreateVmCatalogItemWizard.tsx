@@ -118,7 +118,6 @@ const INSTANCE_TYPES = [
   },
 ]
 
-const BOOT_DISK_SIZES = ['40', '80', '120', '250', '500']
 const BOOT_STORAGE_TIERS = [
   {
     id: 'balanced',
@@ -972,10 +971,9 @@ export function CreateVmCatalogItemWizard({
             </Content>
 
             <FormGroup
-              label="Boot disk size"
+              label="Boot disk size (GiB)"
               fieldId="create-vm-boot-disk"
               isRequired
-              role="radiogroup"
               labelInfo={
                 <EditableFieldToggle
                   id="create-vm-boot-disk-editable"
@@ -984,50 +982,14 @@ export function CreateVmCatalogItemWizard({
                 />
               }
             >
-              <div
+              <TextInput
                 id="create-vm-boot-disk"
-                className="provider-setup-template__card-group create-vm-catalog-wizard__size-cards"
-                role="presentation"
-              >
-                {BOOT_DISK_SIZES.map((size) => {
-                  const isSelected = bootDiskSize === size
-                  return (
-                    <button
-                      key={size}
-                      type="button"
-                      role="radio"
-                      aria-checked={isSelected}
-                      className={`provider-setup-template__select-card provider-setup-template__select-card--instance-type${
-                        isSelected ? ' provider-setup-template__select-card--selected' : ''
-                      }`}
-                      onClick={() => setBootDiskSize(size)}
-                    >
-                      {isSelected ? (
-                        <Label
-                          color="grey"
-                          isCompact
-                          className="provider-setup-template__select-card-selected-badge"
-                        >
-                          Selected
-                        </Label>
-                      ) : null}
-                      <Title
-                        headingLevel="h3"
-                        size="md"
-                        className="provider-setup-template__select-card-title"
-                      >
-                        {size}
-                      </Title>
-                      <Content
-                        component="p"
-                        className="provider-setup-template__select-card-detail"
-                      >
-                        GiB
-                      </Content>
-                    </button>
-                  )
-                })}
-              </div>
+                type="number"
+                min={1}
+                value={bootDiskSize}
+                onChange={(_event, value) => setBootDiskSize(value)}
+                aria-label="Boot disk size in GiB"
+              />
             </FormGroup>
 
             <FormGroup
