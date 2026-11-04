@@ -25,7 +25,8 @@ import {
   buildProviderCreateCatalogItemPath,
   getLandingFocusTopicParam,
   LANDING_FOCUS_TOPIC_PARAM,
-  withDesignHubParam,
+  WORKSPACE_DESIGN_MULTI_SERVICE,
+  WORKSPACE_DESIGN_VM_NO_SERVICE,
   WORKSPACE_WIDTH_FULL,
   WORKSPACE_WIDTH_MAX,
 } from '../shared/workspaceNavUrl'
@@ -185,14 +186,19 @@ export function BmaasLandingPage() {
         {
           id: 'bmaas-landing-design-catalog-item-1',
           label: 'Design 1',
-          to: withDesignHubParam(
-            '/provider/workspace?nav=catalog',
-            TOPIC_CATALOG_ITEM_CREATION,
-          ),
+          to: buildProviderCreateCatalogItemPath({
+            design: WORKSPACE_DESIGN_VM_NO_SERVICE,
+            service: 'virtual-machine',
+            topic: TOPIC_CATALOG_ITEM_CREATION,
+          }),
         },
         {
           id: 'bmaas-landing-design-catalog-item-2',
           label: 'Design 2',
+          to: buildProviderCreateCatalogItemPath({
+            design: WORKSPACE_DESIGN_MULTI_SERVICE,
+            topic: TOPIC_CATALOG_ITEM_CREATION,
+          }),
         },
         {
           id: 'bmaas-landing-design-catalog-item-3',

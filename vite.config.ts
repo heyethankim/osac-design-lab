@@ -19,7 +19,7 @@ const LANDING_DATE_FORMAT: Intl.DateTimeFormatOptions = {
 }
 
 /** Landing footer date — bump when shipping a prototype update. */
-const LANDING_LAST_UPDATED_LABEL = 'October 30, 2026'
+const LANDING_LAST_UPDATED_LABEL = 'November 4, 2026'
 
 /** Prefer explicit label; fall back to latest git commit or today. */
 function getLandingLastUpdatedLabel(): string {
@@ -48,9 +48,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '127.0.0.1',
-    port: 5184,
+    port: 5176,
     strictPort: true,
-    open: true,
     watch: {
       usePolling: true,
       interval: 300,

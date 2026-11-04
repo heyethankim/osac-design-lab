@@ -48,11 +48,15 @@ import {
   findCatalogItemByWorkspaceParam,
   getWorkspaceActionParam,
   getWorkspaceCatalogItemParam,
+  getWorkspaceDesignParam,
   getWorkspaceServiceParam,
   getWorkspaceStepParam,
   syncWorkspaceCatalogItemParam,
   WORKSPACE_ACTION_CREATE_CATALOG_ITEM,
   WORKSPACE_ACTION_PARAM,
+  WORKSPACE_DESIGN_MULTI_SERVICE,
+  WORKSPACE_DESIGN_PARAM,
+  WORKSPACE_DESIGN_VM_NO_SERVICE,
   WORKSPACE_SERVICE_PARAM,
   WORKSPACE_STEP_PARAM,
 } from '../shared/workspaceNavUrl'
@@ -83,6 +87,7 @@ import {
   type PublishedTemplatePayload,
   type RateCard,
 } from '../providerSetup/templateDemo'
+import { CreateVmCatalogItemWizard } from './provider-setup/CreateVmCatalogItemWizard'
 import { ProviderSetupPublishCatalogWizard } from './provider-setup/ProviderSetupPublishCatalogWizard'
 
 type ProviderAdminCatalogPageProps = {
@@ -339,6 +344,7 @@ export function ProviderAdminCatalogPage({
   const [searchValue, setSearchValue] = useState('')
   const [organizations, setOrganizations] = useState(() => getProviderRegisteredOrganizations())
   const [isPublishWizardOpen, setIsPublishWizardOpen] = useState(false)
+  const [isVmCreateWizardOpen, setIsVmCreateWizardOpen] = useState(false)
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<ProviderCatalogDraft | null>(null)
   const [isEditWizardOpen, setIsEditWizardOpen] = useState(false)
   const [editReturnToDetails, setEditReturnToDetails] = useState(false)
@@ -370,6 +376,8 @@ export function ProviderAdminCatalogPage({
   const createInitialStepId = PUBLISH_CATALOG_STEPS.some((step) => step.id === createStepParam)
     ? (createStepParam as PublishCatalogStepId)
     : null
+  const createDesignParam = getWorkspaceDesignParam(searchParams)
+  const createDesignId = createDesignParam ?? WORKSPACE_DESIGN_VM_NO_SERVICE
 
   const uniqueCatalogItems = useMemo(
     () => dedupeCatalogItemsById(catalogItems),
@@ -617,6 +625,7 @@ export function ProviderAdminCatalogPage({
 
   const closeCreateWizard = () => {
     setIsPublishWizardOpen(false)
+    setIsVmCreateWizardOpen(false)
     setPublishResumeScope('global-public')
     setPublishResumeTenantId('')
     setSearchParams(
@@ -625,6 +634,10 @@ export function ProviderAdminCatalogPage({
         let changed = false
         if (getWorkspaceActionParam(next) === WORKSPACE_ACTION_CREATE_CATALOG_ITEM) {
           next.delete(WORKSPACE_ACTION_PARAM)
+          changed = true
+        }
+        if (next.has(WORKSPACE_DESIGN_PARAM)) {
+          next.delete(WORKSPACE_DESIGN_PARAM)
           changed = true
         }
         if (next.has(WORKSPACE_STEP_PARAM)) {
@@ -639,6 +652,20 @@ export function ProviderAdminCatalogPage({
       },
       { replace: true },
     )
+  }
+
+  const handleCreatedCatalogItem = (payload: PublishedTemplatePayload) => {
+    closeCreateWizard()
+    const created = onCreateCatalogItem(payload)
+    if (created?.catalogItemId) {
+      setViewMode('grid')
+      setCatalogViewMode('grid')
+      setSelectedStatus('all')
+      setSearchValue('')
+      beginCatalogItemCreateReveal(created.catalogItemId)
+      setIsViewingDetails(false)
+      syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
+    }
   }
 
   const closeEditWizard = () => {
@@ -661,12 +688,18 @@ export function ProviderAdminCatalogPage({
     }
   }
 
-  const openCreateWizard = () => {
+  const openCreateWizard = (designId = createDesignId) => {
     setIsViewingDetails(false)
     setPublishResumeScope('global-public')
     setPublishResumeTenantId('')
-    setIsPublishWizardOpen(true)
     syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
+    if (designId === WORKSPACE_DESIGN_MULTI_SERVICE) {
+      setIsVmCreateWizardOpen(false)
+      setIsPublishWizardOpen(true)
+      return
+    }
+    setIsPublishWizardOpen(false)
+    setIsVmCreateWizardOpen(true)
   }
 
   useEffect(() => {
@@ -683,11 +716,15 @@ export function ProviderAdminCatalogPage({
   }, [openCatalogItemKey, orderedCatalogItems, onOpenCatalogItemConsumed])
 
   useEffect(() => {
-    if (actionParam !== WORKSPACE_ACTION_CREATE_CATALOG_ITEM || isPublishWizardOpen) {
+    if (
+      actionParam !== WORKSPACE_ACTION_CREATE_CATALOG_ITEM ||
+      isPublishWizardOpen ||
+      isVmCreateWizardOpen
+    ) {
       return
     }
-    openCreateWizard()
-  }, [actionParam, isPublishWizardOpen])
+    openCreateWizard(createDesignId)
+  }, [actionParam, createDesignId, isPublishWizardOpen, isVmCreateWizardOpen])
 
   useEffect(() => {
     const match = findCatalogItemByWorkspaceParam(orderedCatalogItems, itemParam)
@@ -1011,7 +1048,14 @@ export function ProviderAdminCatalogPage({
 
   return (
     <>
-      {isPublishWizardOpen ? (
+      {isVmCreateWizardOpen ? (
+        <CreateVmCatalogItemWizard
+          isOpen={isVmCreateWizardOpen}
+          organizations={organizations}
+          onClose={closeCreateWizard}
+          onCreateCatalogItem={handleCreatedCatalogItem}
+        />
+      ) : isPublishWizardOpen ? (
         <ProviderSetupPublishCatalogWizard
           presentation="page"
           isOpen={isPublishWizardOpen}
@@ -1023,19 +1067,7 @@ export function ProviderAdminCatalogPage({
           initialServiceId={createInitialServiceId}
           initialStepId={createInitialStepId}
           onClose={closeCreateWizard}
-          onCreateCatalogItem={(payload) => {
-            closeCreateWizard()
-            const created = onCreateCatalogItem(payload)
-            if (created?.catalogItemId) {
-              setViewMode('grid')
-              setCatalogViewMode('grid')
-              setSelectedStatus('all')
-              setSearchValue('')
-              beginCatalogItemCreateReveal(created.catalogItemId)
-              setIsViewingDetails(false)
-              syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
-            }
-          }}
+          onCreateCatalogItem={handleCreatedCatalogItem}
           onRegisterOrganization={() => handleRegisterOrganizationFromVip({ kind: 'publish' })}
           isPublishing={isPublishing}
         />
@@ -1109,9 +1141,9 @@ export function ProviderAdminCatalogPage({
             icon={<PlusIcon />}
             className="provider-admin-catalog-items__create"
             isDisabled={isPublishing}
-            onClick={openCreateWizard}
+            onClick={() => openCreateWizard(WORKSPACE_DESIGN_VM_NO_SERVICE)}
           >
-            Create catalog item
+            Create VM catalog item
           </Button>
         </FlexItem>
       </Flex>

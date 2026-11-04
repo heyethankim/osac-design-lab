@@ -21,6 +21,14 @@ export const WORKSPACE_STEP_PARAM = 'step'
 /** Query key for deep-linking a create-catalog service (`baremetal`, `cluster`, …). */
 export const WORKSPACE_SERVICE_PARAM = 'service'
 
+/**
+ * Query key for catalog-item creation design variants.
+ * `1` = VM wizard without Service step; `2` = multi-service wizard with Service.
+ */
+export const WORKSPACE_DESIGN_PARAM = 'design'
+export const WORKSPACE_DESIGN_VM_NO_SERVICE = '1'
+export const WORKSPACE_DESIGN_MULTI_SERVICE = '2'
+
 /** Query key marking a page opened from the design-topics landing (`hub=1`). */
 export const WORKSPACE_HUB_PARAM = 'hub'
 export const WORKSPACE_HUB_VALUE = '1'
@@ -42,6 +50,20 @@ export type WorkspaceAction =
   | typeof WORKSPACE_ACTION_REGISTER_TENANT
 
 export type WorkspaceWidthMode = typeof WORKSPACE_WIDTH_MAX | typeof WORKSPACE_WIDTH_FULL
+
+export type CatalogCreateDesignId =
+  | typeof WORKSPACE_DESIGN_VM_NO_SERVICE
+  | typeof WORKSPACE_DESIGN_MULTI_SERVICE
+
+export function getWorkspaceDesignParam(
+  searchParams: URLSearchParams,
+): CatalogCreateDesignId | null {
+  const value = searchParams.get(WORKSPACE_DESIGN_PARAM)?.trim()
+  if (value === WORKSPACE_DESIGN_VM_NO_SERVICE || value === WORKSPACE_DESIGN_MULTI_SERVICE) {
+    return value
+  }
+  return null
+}
 
 export type SyncWorkspaceNavOptions = NavigateOptions & {
   /**
@@ -156,6 +178,7 @@ export function buildProviderCreateCatalogItemPath(options?: {
   service?: string
   step?: string
   topic?: string
+  design?: CatalogCreateDesignId
   fromDesignHub?: boolean
 }): string {
   const params = new URLSearchParams({
@@ -170,6 +193,9 @@ export function buildProviderCreateCatalogItemPath(options?: {
   }
   if (options?.step) {
     params.set(WORKSPACE_STEP_PARAM, options.step)
+  }
+  if (options?.design) {
+    params.set(WORKSPACE_DESIGN_PARAM, options.design)
   }
   if (options?.fromDesignHub !== false) {
     params.set(WORKSPACE_HUB_PARAM, WORKSPACE_HUB_VALUE)
