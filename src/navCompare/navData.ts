@@ -34,7 +34,7 @@ export const providerAdminNav: PersonaNavConfig = {
   id: 'provider-admin',
   label: 'Provider Admin',
   activeItem: 'tenants',
-  defaultExpanded: ['administration', 'networking', 'storage', 'compute'],
+  defaultExpanded: ['administration', 'compute', 'storage', 'networking'],
   nav: [
     {
       kind: 'link',
@@ -71,14 +71,20 @@ export const providerAdminNav: PersonaNavConfig = {
     },
     {
       kind: 'expand',
-      groupId: 'networking',
-      label: 'Networking',
+      groupId: 'compute',
+      label: 'Compute',
       children: [
         {
-          id: 'external-ip-pools',
-          label: 'External IP pools',
+          id: 'instance-types',
+          label: 'Instance types',
           description:
-            'Manage the shared pools of public IPs that tenants draw from for edge access.',
+            'Define the “sizes” tenants can pick from for bare metal and virtual machines — CPUs, memory, GPUs, the works.',
+        },
+        {
+          id: 'disk-images',
+          label: 'Disk images',
+          description:
+            'Curate the OS and disk images people use when they spin up virtual machines.',
         },
       ],
     },
@@ -103,20 +109,14 @@ export const providerAdminNav: PersonaNavConfig = {
     },
     {
       kind: 'expand',
-      groupId: 'compute',
-      label: 'Compute',
+      groupId: 'networking',
+      label: 'Networking',
       children: [
         {
-          id: 'instance-types',
-          label: 'Instance types',
+          id: 'external-ip-pools',
+          label: 'External IP pools',
           description:
-            'Define the “sizes” tenants can pick from for bare metal and virtual machines — CPUs, memory, GPUs, the works.',
-        },
-        {
-          id: 'disk-images',
-          label: 'Disk images',
-          description:
-            'Curate the OS and disk images people use when they spin up virtual machines.',
+            'Manage the shared pools of public IPs that tenants draw from for edge access.',
         },
       ],
     },
@@ -135,7 +135,7 @@ export const tenantAdminNav: PersonaNavConfig = {
   id: 'tenant-admin',
   label: 'Tenant Admin',
   activeItem: 'catalog',
-  defaultExpanded: ['services', 'networking', 'storage', 'administration'],
+  defaultExpanded: ['services', 'storage', 'networking', 'administration'],
   nav: [
     {
       kind: 'link',
@@ -187,6 +187,19 @@ export const tenantAdminNav: PersonaNavConfig = {
     },
     {
       kind: 'expand',
+      groupId: 'storage',
+      label: 'Storage',
+      children: [
+        {
+          id: 'volumes',
+          label: 'Volumes',
+          description:
+            'Create and manage the disks attached to your workloads. Read-only for the dev preview.',
+        },
+      ],
+    },
+    {
+      kind: 'expand',
       groupId: 'networking',
       label: 'Networking',
       children: [
@@ -200,19 +213,6 @@ export const tenantAdminNav: PersonaNavConfig = {
           label: 'External IPs',
           description:
             'Grab public addresses from provider pools when something needs to be reachable outside.',
-        },
-      ],
-    },
-    {
-      kind: 'expand',
-      groupId: 'storage',
-      label: 'Storage',
-      children: [
-        {
-          id: 'volumes',
-          label: 'Volumes',
-          description:
-            'Create and manage the disks attached to your workloads. Read-only for the dev preview.',
         },
       ],
     },
