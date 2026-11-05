@@ -71,6 +71,16 @@ select.pf-v6-c-form-control {
   max-height: 100%;
 }
 
+.bmaas-app-shell__main:has(.nav-compare) {
+  display: flex;
+  flex-direction: column;
+}
+
+.bmaas-app-shell__main > .nav-compare {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* Prototype chrome — black stripe; magenta only on Back to home pill. */
 .bmaas-design-hub-banner {
   display: flex;

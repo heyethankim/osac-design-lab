@@ -22,9 +22,11 @@ import { useSearchParams } from 'react-router-dom'
 import { RouterButton } from '../components/RouterButton'
 import { BMAAS_LANDING_LAST_UPDATED } from '../bmaasLandingLastUpdated'
 import {
+  buildNavigationStructurePath,
   buildProviderCreateCatalogItemPath,
   getLandingFocusTopicParam,
   LANDING_FOCUS_TOPIC_PARAM,
+  NAVIGATION_STRUCTURE_TOPIC_ID,
   WORKSPACE_DESIGN_MULTI_SERVICE,
   WORKSPACE_DESIGN_VM_NO_SERVICE,
   WORKSPACE_WIDTH_FULL,
@@ -34,11 +36,13 @@ import redHatHatLogoUrl from '../assets/Logo-RedHat-Hat-Color-RGB.svg?url'
 
 const TOPIC_CATALOG_ITEM_CREATION = 'catalog-item-creation'
 const TOPIC_FULL_VS_MAX_WIDTH = 'full-vs-max-width'
+const TOPIC_NAVIGATION_STRUCTURE = NAVIGATION_STRUCTURE_TOPIC_ID
 
 type DesignOption = {
   id: string
   label: string
   to?: string
+  href?: string
 }
 
 type TopicCard = {
@@ -71,6 +75,19 @@ function DesignLinks({ title, designs }: { title: string; designs: DesignOption[
             >
               {design.label}
             </RouterButton>
+          ) : design.href ? (
+            <Button
+              variant="link"
+              component="a"
+              isInline
+              href={design.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              icon={<BlueprintIcon />}
+              aria-label={`${title}: ${design.label}`}
+            >
+              {design.label}
+            </Button>
           ) : (
             <span className="bmaas-landing-topic-card__link-muted">
               <BlueprintIcon aria-hidden />
@@ -235,6 +252,23 @@ export function BmaasLandingPage() {
             step: 'hardware',
             topic: TOPIC_FULL_VS_MAX_WIDTH,
           }),
+        },
+      ],
+    },
+    {
+      id: TOPIC_NAVIGATION_STRUCTURE,
+      title: 'Navigation structure',
+      description:
+        'Side-by-side navigation by persona for Cloud Extensions (previously OSAC). Pages are read-only for the dev preview.',
+      status: 'Draft',
+      authors: 'Ethan Kim',
+      updated: BMAAS_LANDING_LAST_UPDATED,
+      personas: ['Provider Admin', 'Tenant Admin', 'Tenant User', 'IdP Manager'],
+      designs: [
+        {
+          id: 'bmaas-landing-design-navigation',
+          label: 'Design',
+          to: buildNavigationStructurePath(TOPIC_NAVIGATION_STRUCTURE),
         },
       ],
     },

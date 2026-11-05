@@ -4,6 +4,7 @@ import { DesignHubBackBanner } from './components/DesignHubBackBanner'
 import { BmaasLandingPage } from './pages/BmaasLandingPage'
 import { IdpManagerSetupPage } from './pages/IdpManagerSetupPage'
 import { IdpManagerWorkspacePage } from './pages/IdpManagerWorkspacePage'
+import { NavigationStructurePage } from './pages/NavigationStructurePage'
 import { M360AccountDetailsPage } from './pages/m360/M360AccountDetailsPage'
 import { M360AccountsPage } from './pages/m360/M360AccountsPage'
 import { ProviderAdminWorkspacePage } from './pages/ProviderAdminWorkspacePage'
@@ -45,6 +46,7 @@ export default function App() {
           <ConceptualDesignSticker />
           <Routes>
             <Route path="/" element={<BmaasLandingPage />} />
+            <Route path="/design/navigation-structure" element={<NavigationStructurePage />} />
             <Route path="/idp-manager/northstar/change-password" element={<RedirectNorthstarIdpManager />} />
             <Route path="/idp-manager/northstar/workspace" element={<RedirectNorthstarIdpManager />} />
             <Route path="/idp-manager/northstar" element={<RedirectNorthstarIdpManager />} />

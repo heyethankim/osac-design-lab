@@ -151,6 +151,14 @@ export function buildDesignHubHomePath(topicId?: string | null): string {
   return `/?${params.toString()}`
 }
 
+/** Side-by-side navigation structure topic (Design Lab in-app migration of osac-nav). */
+export const NAVIGATION_STRUCTURE_TOPIC_ID = 'navigation-structure'
+export const NAVIGATION_STRUCTURE_PATH = '/design/navigation-structure'
+
+export function buildNavigationStructurePath(topicId = NAVIGATION_STRUCTURE_TOPIC_ID): string {
+  return withDesignHubParam(NAVIGATION_STRUCTURE_PATH, topicId)
+}
+
 export function isServicesWorkspaceNav(navId: string): boolean {
   return navId.startsWith('services-')
 }
