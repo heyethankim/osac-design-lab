@@ -683,7 +683,7 @@ export function CreateVmCatalogItemWizard({
 
   return (
     <CatalogWizardPageShell
-      title="Create VM Catalog Item"
+      title="Create virtual machine catalog item"
       onBackToCatalog={onClose}
       className="catalog-wizard-page--create-vm"
     >

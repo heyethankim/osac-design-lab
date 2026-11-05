@@ -1143,7 +1143,7 @@ export function ProviderAdminCatalogPage({
             isDisabled={isPublishing}
             onClick={() => openCreateWizard(WORKSPACE_DESIGN_VM_NO_SERVICE)}
           >
-            Create VM catalog item
+            Create virtual machine catalog item
           </Button>
         </FlexItem>
       </Flex>
