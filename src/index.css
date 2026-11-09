@@ -235,7 +235,6 @@ select.pf-v6-c-form-control {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  min-height: 100dvh;
   width: 100%;
   box-sizing: border-box;
   padding-block: var(--pf-t--global--spacer--2xl) var(--pf-t--global--spacer--3xl);
@@ -244,9 +243,6 @@ select.pf-v6-c-form-control {
 
 .bmaas-role-landing__wrap {
   width: min(72rem, 100%);
-  min-height: calc(
-    100dvh - var(--pf-t--global--spacer--2xl) - var(--pf-t--global--spacer--3xl)
-  );
 }
 
 .bmaas-landing-main {
@@ -256,7 +252,25 @@ select.pf-v6-c-form-control {
 
 .bmaas-landing-results {
   width: 100%;
-  min-height: 24rem;
+}
+
+.bmaas-landing-resources {
+  width: 100%;
+  padding-block-start: var(--pf-t--global--spacer--sm);
+  border-block-start: var(--pf-t--global--border--width--divider--default) solid
+    var(--pf-t--global--border--color--default);
+}
+
+.bmaas-landing-resources__list.pf-v6-c-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--md);
+  list-style-type: disc;
+  padding-inline-start: var(--pf-t--global--spacer--lg);
+}
+
+.bmaas-landing-resources__list .pf-v6-c-list__item {
+  display: list-item;
 }
 
 .bmaas-landing-section-heading {
@@ -324,12 +338,13 @@ select.pf-v6-c-form-control {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--pf-t--global--spacer--lg);
-  align-items: stretch;
+  align-items: start;
 }
 
 .bmaas-landing-topic-card {
   display: flex;
   flex-direction: column;
+  height: auto;
   transition: background-color 1.2s ease;
 }
 
@@ -384,15 +399,21 @@ select.pf-v6-c-form-control {
 
 .bmaas-landing-topic-card__body {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: var(--pf-t--global--spacer--md);
 }
 
-.bmaas-landing-topic-card__description.pf-v6-c-content--p,
-.bmaas-landing-topic-card__description {
-  margin: 0;
+.bmaas-landing-topic-card__body > .bmaas-landing-topic-card__description.pf-v6-c-content--p,
+.bmaas-landing-topic-card__body > .bmaas-landing-topic-card__description {
+  margin-block: 0;
+  margin-inline: 0;
   color: var(--pf-t--global--text--color--subtle);
+}
+
+/* Keep description → Design links tight (body gap alone). */
+.bmaas-landing-topic-card__description + .bmaas-landing-topic-card__links {
+  margin-block-start: calc(var(--pf-t--global--spacer--sm) - var(--pf-t--global--spacer--md));
 }
 
 .bmaas-landing-topic-card__links {
@@ -435,7 +456,7 @@ select.pf-v6-c-form-control {
 }
 
 .bmaas-landing-topic-card__personas {
-  margin-block-start: auto;
+  margin-block-start: 0;
 }
 
 @media (max-width: 992px) {

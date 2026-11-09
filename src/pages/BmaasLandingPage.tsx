@@ -11,6 +11,8 @@ import {
   FlexItem,
   Label,
   LabelGroup,
+  List,
+  ListItem,
   SearchInput,
   Title,
 } from '@patternfly/react-core'
@@ -48,6 +50,14 @@ import redHatHatLogoUrl from '../assets/Logo-RedHat-Hat-Color-RGB.svg?url'
 type TopicStatus = 'In progress' | 'In review' | 'Draft'
 
 const TOPIC_STATUS_SECTIONS: readonly TopicStatus[] = ['In review', 'In progress', 'Draft']
+
+const LANDING_RESOURCES = [
+  {
+    id: 'red-hat-icons',
+    label: 'Red Hat icons',
+    href: 'https://red-hat-icons.netlify.app/',
+  },
+] as const
 
 type DesignOption = {
   id: string
@@ -239,7 +249,6 @@ function TopicDesignCard({
 }: TopicCard & { isFocused?: boolean }) {
   return (
     <Card
-      isFullHeight
       component="article"
       id={`topic-${id}`}
       className={css(
@@ -452,7 +461,7 @@ export function BmaasLandingPage() {
         className="bmaas-role-landing__wrap"
         direction={{ default: 'column' }}
         alignItems={{ default: 'alignItemsCenter' }}
-        gap={{ default: 'gap2xl' }}
+        gap={{ default: 'gapLg' }}
         flexWrap={{ default: 'nowrap' }}
       >
         <FlexItem>
@@ -471,11 +480,7 @@ export function BmaasLandingPage() {
           </Flex>
         </FlexItem>
 
-        <FlexItem
-          alignSelf={{ default: 'alignSelfStretch' }}
-          className="bmaas-landing-main"
-          grow={{ default: 'grow' }}
-        >
+        <FlexItem alignSelf={{ default: 'alignSelfStretch' }} className="bmaas-landing-main">
           <div className="catalog-view-toolbar bmaas-landing-toolbar">
             <div className="catalog-view-toolbar__start">
               <SearchInput
@@ -515,7 +520,7 @@ export function BmaasLandingPage() {
             ) : (
               <Flex
                 direction={{ default: 'column' }}
-                gap={{ default: 'gap2xl' }}
+                gap={{ default: 'gapXl' }}
                 fullWidth={{ default: 'fullWidth' }}
               >
                 {topicsByStatus.map(({ status, topics: sectionTopics }) => (
@@ -583,6 +588,34 @@ export function BmaasLandingPage() {
           </div>
         </FlexItem>
 
+        <FlexItem alignSelf={{ default: 'alignSelfStretch' }} className="bmaas-landing-resources">
+          <Flex
+            direction={{ default: 'column' }}
+            gap={{ default: 'gapLg' }}
+            fullWidth={{ default: 'fullWidth' }}
+          >
+            <Title headingLevel="h2" size="xl">
+              Resources
+            </Title>
+            <List className="bmaas-landing-resources__list">
+              {LANDING_RESOURCES.map((resource) => (
+                <ListItem key={resource.id}>
+                  <Button
+                    variant="link"
+                    component="a"
+                    isInline
+                    href={resource.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${resource.label} (opens in a new tab)`}
+                  >
+                    {resource.label}
+                  </Button>
+                </ListItem>
+              ))}
+            </List>
+          </Flex>
+        </FlexItem>
       </Flex>
     </div>
   )

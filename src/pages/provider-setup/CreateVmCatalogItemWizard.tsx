@@ -58,7 +58,7 @@ type VmScope = 'global' | 'tenant'
 type GuestOs = 'linux' | 'windows' | 'unspecified'
 type CloudInitSource = 'enter-value' | 'select-secret'
 
-const DEFAULT_VM_CATALOG_NAME = 'bare-metal-gpu-training-server'
+const DEFAULT_VM_CATALOG_NAME = 'general-purpose-rhel-vm'
 
 const DISK_IMAGES = [
   ...getCatalogDiskImageOptions().map((option) => ({

@@ -11,12 +11,12 @@ const INSTANCES_VIEW_MODE_KEY = 'bmaas-instances-view-mode'
 const ADMINISTRATION_VIEW_MODE_KEY = 'bmaas-administration-view-mode'
 const NETWORKING_VIEW_MODE_KEY = 'bmaas-networking-view-mode'
 const SECRETS_VIEW_MODE_KEY = 'bmaas-secrets-view-mode'
-const LANDING_VIEW_MODE_KEY = 'bmaas-landing-view-mode'
+const LANDING_VIEW_MODE_KEY = 'bmaas-landing-view-mode-v2'
 
 /** Grid is the default browse mode across personas. */
 const DEFAULT_VIEW_MODE: ViewMode = 'grid'
-/** List is the default Design Lab landing browse mode for quick scanning. */
-const DEFAULT_LANDING_VIEW_MODE: ViewMode = 'list'
+/** Grid is the default Design Lab landing browse mode. */
+const DEFAULT_LANDING_VIEW_MODE: ViewMode = 'grid'
 /** Topology is the default Projects browse mode for tenant admin and tenant user. */
 export const DEFAULT_PROJECTS_VIEW_MODE: ProjectsViewMode = 'topology'
 
