@@ -902,7 +902,9 @@ export function TenantOnboardingWizard({
             isInline
             title="No integrated billing system detected"
             className="tenant-onboarding__alert"
-          />
+          >
+            Billing account linking is unavailable. Enter an optional external billing ID instead.
+          </Alert>
           <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
             {renderExternalBillingIdField()}
           </Form>
