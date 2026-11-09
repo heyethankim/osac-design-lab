@@ -450,11 +450,21 @@ export function OrganizationDetailsPage({
                   </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
-                  <DescriptionListTerm>OSAC URL</DescriptionListTerm>
+                  <DescriptionListTerm>Login URL</DescriptionListTerm>
                   <DescriptionListDescription>
                     <span className="provider-admin-organizations__osac-url">
                       <code>{getOrganizationOsacLoginPath(organization.slug)}</code>
                     </span>
+                  </DescriptionListDescription>
+                </DescriptionListGroup>
+                <DescriptionListGroup>
+                  <DescriptionListTerm>External billing ID</DescriptionListTerm>
+                  <DescriptionListDescription>
+                    {organization.externalBillingId?.trim() ? (
+                      <code>{organization.externalBillingId.trim()}</code>
+                    ) : (
+                      '—'
+                    )}
                   </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>

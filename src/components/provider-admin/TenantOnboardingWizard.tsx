@@ -65,6 +65,7 @@ import {
   buildNextRegisterOrganizationForm,
   areAdditionalDomainsValid,
   buildRegisterBreakGlassFields,
+  EXTERNAL_BILLING_ID_MAX_LENGTH,
   formFromRegisteredOrganization,
   generateOrganizationId,
   getTakenEmailDomains,
@@ -73,6 +74,7 @@ import {
   isOrganizationSlugTaken,
   isValidPrimaryDomain,
   normalizeAdditionalDomains,
+  normalizeExternalBillingId,
   normalizePrimaryDomain,
   slugifyOrganizationName,
   TENANT_ONBOARDING_STEPS,
@@ -466,6 +468,7 @@ export function TenantOnboardingWizard({
       m360ConnectionStatus: 'pending',
       billingAccountId: '',
       billingAccountName: form.billingAccountName.trim() || `${slug}-enterprise-billing`,
+      externalBillingId: normalizeExternalBillingId(form.externalBillingId).trim(),
       billingAccountLinked: false,
       tenantSetupStatus: 'incomplete',
       logoSrc: form.logoSrc.trim() || null,
@@ -526,6 +529,7 @@ export function TenantOnboardingWizard({
       slug,
       primaryDomain: normalizedPrimaryDomain,
       additionalDomains: normalizedAdditionalDomains,
+      externalBillingId: normalizeExternalBillingId(form.externalBillingId).trim(),
       logoSrc: form.logoSrc.trim() || null,
       logoFileName: form.logoFileName.trim() || null,
     }
@@ -591,6 +595,7 @@ export function TenantOnboardingWizard({
       m360AccountId: linkedTenantName,
       billingAccountId: linkedTenantName,
       billingAccountName: linkedTenantName,
+      externalBillingId: normalizeExternalBillingId(form.externalBillingId).trim(),
       m360RateCardId: detectedRateCard?.id,
       m360RateCardName: detectedRateCard?.name,
       m360ConnectionStatus: resolveM360ConnectionStatus(linkedTenantName),
@@ -971,6 +976,30 @@ export function TenantOnboardingWizard({
             ) : null}
           </Form>
         ) : null}
+
+        <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
+          <FormGroup label="External billing ID" fieldId="tenant-onboarding-external-billing-id">
+            <TextInput
+              id="tenant-onboarding-external-billing-id"
+              value={form.externalBillingId}
+              aria-label="External billing ID"
+              maxLength={EXTERNAL_BILLING_ID_MAX_LENGTH}
+              onChange={(_event, value) =>
+                setForm((current) => ({
+                  ...current,
+                  externalBillingId: normalizeExternalBillingId(value),
+                }))
+              }
+            />
+            <FormHelperText>
+              <HelperText>
+                <HelperTextItem>
+                  Your billing system’s account ID. Not checked against the platform.
+                </HelperTextItem>
+              </HelperText>
+            </FormHelperText>
+          </FormGroup>
+        </Form>
       </div>
     )
   }
@@ -1049,6 +1078,12 @@ export function TenantOnboardingWizard({
             <DescriptionListTerm>M360 billing account</DescriptionListTerm>
             <DescriptionListDescription>
               {selectedAccount ? getM360AccountTenantName(selectedAccount) : '—'}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>External billing ID</DescriptionListTerm>
+            <DescriptionListDescription>
+              {normalizeExternalBillingId(form.externalBillingId).trim() || '—'}
             </DescriptionListDescription>
           </DescriptionListGroup>
         </DescriptionList>

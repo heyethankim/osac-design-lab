@@ -227,6 +227,12 @@ export const tenantAdminNav: PersonaNavConfig = {
           description: 'Decide who can do what — bind people to roles across the tenant.',
         },
         {
+          id: 'service-accounts',
+          label: 'Service accounts',
+          description:
+            'Create non-human accounts for CI systems and other automation, with keys and role access.',
+        },
+        {
           id: 'billing',
           label: 'Billing',
           description: 'Keep an eye on usage and costs for your organization.',

@@ -8,6 +8,7 @@ import {
   m360RateLineToRateCard,
   resolveBareMetalComposedRateEstimate,
   resolveClusterComposedRateEstimate,
+  resolveStorageRateEstimate,
 } from './m360RateLines'
 import {
   findM360AccountByReference,
@@ -365,11 +366,13 @@ function resolveCatalogItemRateLinePricing(
     }
   }
 
-  if ((item.serviceId ?? 'baremetal') === 'baremetal') {
+  const composeServiceId = item.serviceId ?? 'baremetal'
+  if (composeServiceId === 'baremetal' || composeServiceId === 'virtual-machine') {
     const composed = resolveBareMetalComposedRateEstimate(
       item.instanceTypeId,
       item.diskImageId,
       rateCardId,
+      { serviceId: composeServiceId },
     )
     if (composed) {
       return {
@@ -485,6 +488,7 @@ export function estimateLaunchHourlyCost(options: {
   catalogItem: CatalogItemPricingInput
   instanceType?: string
   bootDiskSizeGiB?: number
+  storageTierId?: string
 }): number | null {
   const pricing = getCatalogItemM360Pricing(options.catalogItem)
   if (pricing.status !== 'configured' || pricing.hourlyRate === null) {
@@ -493,16 +497,17 @@ export function estimateLaunchHourlyCost(options: {
 
   let hourly = pricing.hourlyRate
   const bootDiskGiB = options.bootDiskSizeGiB ?? 0
-  if (bootDiskGiB > 100) {
-    hourly += ((bootDiskGiB - 100) / 100) * 0.05
+  if (bootDiskGiB > 0) {
+    const storage = resolveStorageRateEstimate(
+      options.storageTierId ?? 'balanced',
+      bootDiskGiB,
+    )
+    if (storage) {
+      hourly += storage.hourlyRate
+    }
   }
 
-  const instanceType = options.instanceType?.toLowerCase() ?? ''
-  if (instanceType.includes('gpu') || instanceType.includes('a100')) {
-    hourly *= 1.08
-  }
-
-  return hourly
+  return Math.round(hourly * 100) / 100
 }
 
 export function formatLaunchCostEstimate(hourly: number | null): string {

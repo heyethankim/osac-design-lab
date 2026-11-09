@@ -12,6 +12,7 @@ import { TenantAdminOverviewPage } from './tenant-admin/TenantAdminOverviewPage'
 import { TenantAdminAdministratorsPage } from './tenant-admin/TenantAdminAdministratorsPage'
 import { TenantAdminBillingPage } from './tenant-admin/TenantAdminBillingPage'
 import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
+import { TenantAdminServiceAccountsPage } from './tenant-admin/TenantAdminServiceAccountsPage'
 import { TenantSecretsPage } from './tenant/TenantSecretsPage'
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
 import {
@@ -72,6 +73,7 @@ function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
     value === 'services-virtual-machines' ||
     value === 'projects-teams' ||
     value === 'administration-roles' ||
+    value === 'administration-service-accounts' ||
     value === 'administration-billing' ||
     value === 'networking-virtual-networks' ||
     value === 'networking-external-ip-pools' ||
@@ -391,6 +393,8 @@ export function TenantAdminWorkspacePage() {
             onOrganizationChange={setOrganization}
           />
         )
+      case 'administration-service-accounts':
+        return <TenantAdminServiceAccountsPage tenantSlug={tenant} />
       case 'administration-billing':
         return <TenantAdminBillingPage organization={organization} />
       case 'networking-virtual-networks':

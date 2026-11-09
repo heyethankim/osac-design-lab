@@ -47,6 +47,8 @@ export type TenantSecret = {
   summary: string
   description: string
   labels: string[]
+  /** Optional project scope (e.g. service-account token secrets). */
+  projectId?: string | null
   data: TenantSecretData
 }
 

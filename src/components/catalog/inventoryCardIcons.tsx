@@ -3,6 +3,7 @@ import { RhUiConnectedIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-
 import { OutlinedBuildingIcon } from '@patternfly/react-icons/dist/esm/icons/outlined-building-icon'
 import { RhUiKeyIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-key-icon'
 import { RhUiProfileIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-profile-icon'
+import { RhUiRobotIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-robot-icon'
 import { RhUiZoneIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-zone-icon'
 
 type InventoryCardIconComponent = ComponentType<SVGProps<SVGSVGElement>>
@@ -12,6 +13,7 @@ export const VIRTUAL_NETWORK_CARD_ICON: InventoryCardIconComponent = RhUiZoneIco
 export const EXTERNAL_NETWORK_CARD_ICON: InventoryCardIconComponent = RhUiConnectedIcon
 export const SECRET_CARD_ICON: InventoryCardIconComponent = RhUiKeyIcon
 export const ADMINISTRATOR_CARD_ICON: InventoryCardIconComponent = RhUiProfileIcon
+export const SERVICE_ACCOUNT_CARD_ICON: InventoryCardIconComponent = RhUiRobotIcon
 
 export function renderInventoryCardIcon(Icon: InventoryCardIconComponent) {
   return <Icon aria-hidden />

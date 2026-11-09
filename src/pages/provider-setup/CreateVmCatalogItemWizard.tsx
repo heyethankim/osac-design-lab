@@ -34,7 +34,7 @@ import { RhStandardGlobeAbstractIcon } from '@patternfly/react-icons/dist/esm/ic
 import { RhStandardKeyIcon } from '@patternfly/react-icons/dist/esm/icons/rh-standard-key-icon'
 import { RhStandardOfficeIcon } from '@patternfly/react-icons/dist/esm/icons/rh-standard-office-icon'
 import { WindowsIcon } from '@patternfly/react-icons/dist/esm/icons/windows-icon'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   DEFAULT_M360_RATE_CARD_ID,
   findM360OsLicenseRateLine,
@@ -374,7 +374,9 @@ type StorageTierOption = (typeof BOOT_STORAGE_TIERS)[number]
 type AdditionalDisk = {
   id: string
   sizeGiB: string
+  sizeEditable: boolean
   storageTierId: string
+  storageEditable: boolean
 }
 
 const DEFAULT_ADDITIONAL_DISK_SIZE = '30'
@@ -383,7 +385,9 @@ function createAdditionalDisk(): AdditionalDisk {
   return {
     id: `disk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     sizeGiB: DEFAULT_ADDITIONAL_DISK_SIZE,
+    sizeEditable: false,
     storageTierId: DEFAULT_BOOT_STORAGE_TIER,
+    storageEditable: false,
   }
 }
 
@@ -406,10 +410,12 @@ function StorageTierSelect({
   id,
   value,
   onChange,
+  ariaLabel = 'Boot storage tier',
 }: {
   id: string
   value: string
   onChange: (storageTierId: string) => void
+  ariaLabel?: string
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const selected =
@@ -432,7 +438,7 @@ function StorageTierSelect({
           id={id}
           isExpanded={isOpen}
           onClick={() => setIsOpen((open) => !open)}
-          aria-label="Boot storage tier"
+          aria-label={ariaLabel}
           className="create-vm-instance-type-select__toggle bmaas-dropdown-toggle"
         >
           {selected ? <StorageTierOptionContent tier={selected} /> : 'Select boot storage tier'}
@@ -1015,63 +1021,90 @@ export function CreateVmCatalogItemWizard({
               {additionalDisks.length > 0 ? (
                 <div className="create-vm-catalog-wizard__additional-disk-list">
                   {additionalDisks.map((disk, index) => (
-                    <div key={disk.id} className="create-vm-catalog-wizard__additional-disk">
-                      <div className="create-vm-catalog-wizard__additional-disk-header">
-                        <Title headingLevel="h4" size="md">
-                          Disk set {index + 1}
-                        </Title>
-                        <Button
-                          variant="link"
-                          isInline
-                          isDanger
-                          icon={<MinusCircleIcon />}
-                          onClick={() =>
-                            setAdditionalDisks((current) =>
-                              current.filter((item) => item.id !== disk.id),
-                            )
+                      <div key={disk.id} className="create-vm-catalog-wizard__additional-disk">
+                        <div className="create-vm-catalog-wizard__additional-disk-header">
+                          <Title headingLevel="h4" size="md">
+                            Disk set {index + 1}
+                          </Title>
+                          <Button
+                            variant="link"
+                            isInline
+                            isDanger
+                            icon={<MinusCircleIcon />}
+                            onClick={() =>
+                              setAdditionalDisks((current) =>
+                                current.filter((item) => item.id !== disk.id),
+                              )
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                        <FormGroup
+                          label="Disk size (GiB)"
+                          fieldId={`create-vm-additional-disk-size-${disk.id}`}
+                          isRequired
+                          labelInfo={
+                            <EditableFieldToggle
+                              id={`create-vm-additional-disk-size-editable-${disk.id}`}
+                              isChecked={disk.sizeEditable}
+                              onChange={(sizeEditable) =>
+                                setAdditionalDisks((current) =>
+                                  current.map((item) =>
+                                    item.id === disk.id ? { ...item, sizeEditable } : item,
+                                  ),
+                                )
+                              }
+                            />
                           }
                         >
-                          Remove
-                        </Button>
+                          <TextInput
+                            id={`create-vm-additional-disk-size-${disk.id}`}
+                            type="number"
+                            min={1}
+                            value={disk.sizeGiB}
+                            onChange={(_event, value) =>
+                              setAdditionalDisks((current) =>
+                                current.map((item) =>
+                                  item.id === disk.id ? { ...item, sizeGiB: value } : item,
+                                ),
+                              )
+                            }
+                            aria-label={`Disk set ${index + 1} size`}
+                          />
+                        </FormGroup>
+                        <FormGroup
+                          label="Storage tier"
+                          fieldId={`create-vm-additional-disk-tier-${disk.id}`}
+                          isRequired
+                          labelInfo={
+                            <EditableFieldToggle
+                              id={`create-vm-additional-disk-tier-editable-${disk.id}`}
+                              isChecked={disk.storageEditable}
+                              onChange={(storageEditable) =>
+                                setAdditionalDisks((current) =>
+                                  current.map((item) =>
+                                    item.id === disk.id ? { ...item, storageEditable } : item,
+                                  ),
+                                )
+                              }
+                            />
+                          }
+                        >
+                          <StorageTierSelect
+                            id={`create-vm-additional-disk-tier-${disk.id}`}
+                            value={disk.storageTierId}
+                            onChange={(storageTierId) =>
+                              setAdditionalDisks((current) =>
+                                current.map((item) =>
+                                  item.id === disk.id ? { ...item, storageTierId } : item,
+                                ),
+                              )
+                            }
+                            ariaLabel={`Disk set ${index + 1} storage tier`}
+                          />
+                        </FormGroup>
                       </div>
-                      <FormGroup
-                        label="Disk size (GiB)"
-                        fieldId={`create-vm-additional-disk-size-${disk.id}`}
-                        isRequired
-                      >
-                        <TextInput
-                          id={`create-vm-additional-disk-size-${disk.id}`}
-                          type="number"
-                          min={1}
-                          value={disk.sizeGiB}
-                          onChange={(_event, value) =>
-                            setAdditionalDisks((current) =>
-                              current.map((item) =>
-                                item.id === disk.id ? { ...item, sizeGiB: value } : item,
-                              ),
-                            )
-                          }
-                          aria-label={`Disk set ${index + 1} size`}
-                        />
-                      </FormGroup>
-                      <FormGroup
-                        label="Storage tier"
-                        fieldId={`create-vm-additional-disk-tier-${disk.id}`}
-                        isRequired
-                      >
-                        <StorageTierSelect
-                          id={`create-vm-additional-disk-tier-${disk.id}`}
-                          value={disk.storageTierId}
-                          onChange={(storageTierId) =>
-                            setAdditionalDisks((current) =>
-                              current.map((item) =>
-                                item.id === disk.id ? { ...item, storageTierId } : item,
-                              ),
-                            )
-                          }
-                        />
-                      </FormGroup>
-                    </div>
                   ))}
                 </div>
               ) : null}
@@ -1234,6 +1267,25 @@ export function CreateVmCatalogItemWizard({
                 }
                 editable={bootStorageEditable}
               />
+              {additionalDisks.map((disk, index) => {
+                const tierLabel =
+                  BOOT_STORAGE_TIERS.find((tier) => tier.id === disk.storageTierId)?.label ||
+                  'Not set'
+                return (
+                  <Fragment key={disk.id}>
+                    <ReviewRow
+                      term={`Disk set ${index + 1} size`}
+                      value={disk.sizeGiB ? `${disk.sizeGiB} GiB` : 'Not set'}
+                      editable={disk.sizeEditable}
+                    />
+                    <ReviewRow
+                      term={`Disk set ${index + 1} storage tier`}
+                      value={tierLabel}
+                      editable={disk.storageEditable}
+                    />
+                  </Fragment>
+                )
+              })}
             </DescriptionList>
 
             <Title headingLevel="h3" size="md" className="create-vm-catalog-wizard__review-heading">

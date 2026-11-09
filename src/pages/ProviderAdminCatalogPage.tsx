@@ -716,15 +716,13 @@ export function ProviderAdminCatalogPage({
   }, [openCatalogItemKey, orderedCatalogItems, onOpenCatalogItemConsumed])
 
   useEffect(() => {
-    if (
-      actionParam !== WORKSPACE_ACTION_CREATE_CATALOG_ITEM ||
-      isPublishWizardOpen ||
-      isVmCreateWizardOpen
-    ) {
+    if (actionParam !== WORKSPACE_ACTION_CREATE_CATALOG_ITEM) {
       return
     }
+    // Re-run when `design` changes so hub banner Design 1 ↔ Design 2 switches
+    // while a create wizard is already open (do not early-return on open state).
     openCreateWizard(createDesignId)
-  }, [actionParam, createDesignId, isPublishWizardOpen, isVmCreateWizardOpen])
+  }, [actionParam, createDesignId])
 
   useEffect(() => {
     const match = findCatalogItemByWorkspaceParam(orderedCatalogItems, itemParam)

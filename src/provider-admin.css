@@ -2429,6 +2429,7 @@
   margin-block-start: 0;
 }
 
+
 .provider-setup-template__select-card--template .provider-setup-template__select-card-detail.pf-v6-c-content--p {
   margin-block-end: var(--pf-t--global--spacer--md);
 }
@@ -5795,6 +5796,13 @@ html[data-wizard-width='max'] .catalog-wizard-page__wizard.pf-v6-c-wizard .pf-v6
   padding-block-end: var(--pf-t--global--spacer--lg);
 }
 
+.provider-admin-organizations__card-billing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--xs);
+  min-width: 0;
+}
+
 .provider-admin-organizations__card-specs {
   flex: 0 0 auto;
 }
@@ -6515,6 +6523,13 @@ html[data-wizard-width='max'] .catalog-wizard-page__wizard.pf-v6-c-wizard .pf-v6
 .provider-admin-organizations__card:not(:has(.provider-admin-organizations__card-footer))
   .pf-v6-c-card__body {
   padding-block-end: var(--pf-t--global--spacer--lg);
+}
+
+.provider-admin-organizations__card-billing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--xs);
+  min-width: 0;
 }
 
 .provider-admin-organizations__card-specs {

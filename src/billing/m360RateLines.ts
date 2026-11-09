@@ -189,6 +189,62 @@ export const DEMO_M360_RATE_LINES: M360RateLine[] = [
     catalogItemId: DEMO_CATALOG_ITEM_IDS.vmNetworkAttachments,
     instanceTypeId: 'small',
   }),
+  // Create VM catalog wizard flavors (vm-type-1-*)
+  line({
+    id: 'line-enterprise-us-vm-type-1-small',
+    rateCardId: 'rate-enterprise-us',
+    serviceId: 'virtual-machine',
+    resourceLabel: 'Small · 1 vCPU · 2 GiB',
+    resourceShortLabel: 'Virtual machine — Small',
+    hourlyRate: 1.2,
+    monthlyRate: 876,
+    billingUnit: 'per-instance',
+    instanceTypeId: 'vm-type-1-small',
+  }),
+  line({
+    id: 'line-enterprise-us-vm-type-1-medium',
+    rateCardId: 'rate-enterprise-us',
+    serviceId: 'virtual-machine',
+    resourceLabel: 'Medium · 2 vCPU · 10 GiB',
+    resourceShortLabel: 'Virtual machine — Medium',
+    hourlyRate: 2.4,
+    monthlyRate: 1752,
+    billingUnit: 'per-instance',
+    instanceTypeId: 'vm-type-1-medium',
+  }),
+  line({
+    id: 'line-enterprise-us-vm-type-1-large',
+    rateCardId: 'rate-enterprise-us',
+    serviceId: 'virtual-machine',
+    resourceLabel: 'Large · 4 vCPU · 16 GiB',
+    resourceShortLabel: 'Virtual machine — Large',
+    hourlyRate: 4.8,
+    monthlyRate: 3504,
+    billingUnit: 'per-instance',
+    instanceTypeId: 'vm-type-1-large',
+  }),
+  line({
+    id: 'line-enterprise-us-vm-type-1-gpu-small',
+    rateCardId: 'rate-enterprise-us',
+    serviceId: 'virtual-machine',
+    resourceLabel: 'GPU Small · 4 vCPU · 16 GiB · 1 GPU',
+    resourceShortLabel: 'Virtual machine — GPU Small',
+    hourlyRate: 6.4,
+    monthlyRate: 4672,
+    billingUnit: 'per-instance',
+    instanceTypeId: 'vm-type-1-gpu-small',
+  }),
+  line({
+    id: 'line-enterprise-us-vm-type-1-gpu-large',
+    rateCardId: 'rate-enterprise-us',
+    serviceId: 'virtual-machine',
+    resourceLabel: 'GPU Large · 8 vCPU · 32 GiB · 2 GPU',
+    resourceShortLabel: 'Virtual machine — GPU Large',
+    hourlyRate: 12.8,
+    monthlyRate: 9344,
+    billingUnit: 'per-instance',
+    instanceTypeId: 'vm-type-1-gpu-large',
+  }),
   line({
     id: 'line-enterprise-us-model-small',
     rateCardId: 'rate-enterprise-us',
@@ -266,6 +322,17 @@ export const DEMO_M360_RATE_LINES: M360RateLine[] = [
     monthlyRate: 0,
     billingUnit: 'per-instance',
     diskImageId: 'rocky-9.3',
+  }),
+  line({
+    id: 'line-enterprise-us-os-windows-server-2022',
+    rateCardId: 'rate-enterprise-us',
+    serviceId: 'baremetal',
+    resourceLabel: 'Windows Server 2022 · OS license',
+    resourceShortLabel: 'OS — Windows Server 2022',
+    hourlyRate: 0.15,
+    monthlyRate: 110,
+    billingUnit: 'per-instance',
+    diskImageId: 'windows-server-2022',
   }),
 
   // Enterprise — EU (higher regional multiplier on key lines)
@@ -552,15 +619,37 @@ export function m360RateLineToRateCard(line: M360RateLine): RateCard {
   }
 }
 
+export function formatM360RateLineHourly(line: Pick<M360RateLine, 'hourlyRate'>): string {
+  return `$${line.hourlyRate.toFixed(2)}/hr`
+}
+
+export function formatM360RateLineMonthly(line: Pick<M360RateLine, 'monthlyRate'>): string {
+  return `$${line.monthlyRate.toLocaleString('en-US', { maximumFractionDigits: 0 })}/mo`
+}
+
 export function formatM360RateLineSummary(line: M360RateLine): string {
-  const hourly = line.hourlyRate.toFixed(2)
-  const monthly = line.monthlyRate.toLocaleString('en-US', { maximumFractionDigits: 0 })
   const unit = line.billingUnit === 'per-endpoint' ? 'per endpoint' : 'per instance'
-  return `$${hourly}/hr · $${monthly}/mo ${unit}`
+  return `${formatM360RateLineHourly(line)} · ${formatM360RateLineMonthly(line)} ${unit}`
 }
 
 export function formatM360RateLineCatalogSummary(line: M360RateLine): string {
   return `${formatM360RateLineSummary(line)} for ${line.resourceShortLabel}`
+}
+
+/** Compact range for editable tenant pricing (hardware-only rates). */
+export function formatM360HourlyRateRange(hourlyRates: readonly number[]): string | null {
+  const rates = hourlyRates.filter((rate) => Number.isFinite(rate) && rate >= 0)
+  if (rates.length === 0) {
+    return null
+  }
+
+  const min = Math.min(...rates)
+  const max = Math.max(...rates)
+  if (min === max) {
+    return `$${min.toFixed(2)}/hr`
+  }
+
+  return `$${min.toFixed(2)}–$${max.toFixed(2)}/hr`
 }
 
 type CatalogRateLineMatchInput = Pick<
@@ -690,14 +779,81 @@ export type ClusterMultiComposedRateEstimate = {
   rateCardId: string
 }
 
-/** Bare metal: hardware flavor + OS license add-on. */
+/** Hours used when converting $/GB-month storage rates into an hourly estimate. */
+export const M360_STORAGE_HOURS_PER_MONTH = 730
+
+export type M360StorageTierId = 'balanced' | 'performance' | 'capacity' | 'ai-ml-optimized'
+
+/** Demo storage tier rates ($/GB-month). */
+export const M360_STORAGE_TIER_RATES: Record<
+  M360StorageTierId,
+  { id: M360StorageTierId; label: string; gbMonthRate: number }
+> = {
+  balanced: { id: 'balanced', label: 'Balanced', gbMonthRate: 0.1 },
+  performance: { id: 'performance', label: 'Performance', gbMonthRate: 0.2 },
+  capacity: { id: 'capacity', label: 'Capacity', gbMonthRate: 0.05 },
+  'ai-ml-optimized': { id: 'ai-ml-optimized', label: 'AI/ML optimized', gbMonthRate: 0.25 },
+}
+
+export type M360StorageRateEstimate = {
+  tierId: M360StorageTierId
+  tierLabel: string
+  sizeGiB: number
+  gbMonthRate: number
+  hourlyRate: number
+  monthlyRate: number
+}
+
+/** Bare metal / VM compose: hardware + OS license + storage. */
 export type BareMetalComposedRateEstimate = {
   hardware: M360RateLine
   osLicense: M360RateLine
+  /** Boot / primary disk storage. */
+  storage: M360StorageRateEstimate
+  /** Extra attached disks (Create VM wizard). */
+  additionalStorage: M360StorageRateEstimate[]
   hourlyRate: number
   monthlyRate: number
   currency: string
   rateCardId: string
+}
+
+export function isM360StorageTierId(value: string | undefined | null): value is M360StorageTierId {
+  return Boolean(value && value in M360_STORAGE_TIER_RATES)
+}
+
+export function resolveStorageRateEstimate(
+  tierId: string | undefined | null,
+  sizeGiB: number,
+): M360StorageRateEstimate | null {
+  if (!isM360StorageTierId(tierId) || !Number.isFinite(sizeGiB) || sizeGiB <= 0) {
+    return null
+  }
+
+  const tier = M360_STORAGE_TIER_RATES[tierId]
+  const monthlyRate = Math.round(tier.gbMonthRate * sizeGiB * 100) / 100
+  const hourlyRate = Math.round((monthlyRate / M360_STORAGE_HOURS_PER_MONTH) * 100) / 100
+
+  return {
+    tierId: tier.id,
+    tierLabel: tier.label,
+    sizeGiB,
+    gbMonthRate: tier.gbMonthRate,
+    hourlyRate,
+    monthlyRate,
+  }
+}
+
+/** Default local/boot disk size used when a catalog item has no explicit storage step. */
+export function getDefaultBootDiskSizeGiB(instanceTypeId: string | undefined | null): number {
+  const normalized = instanceTypeId?.trim() ?? ''
+  if (/large|xl|gpu/i.test(normalized)) {
+    return 960
+  }
+  if (/medium/i.test(normalized)) {
+    return 480
+  }
+  return 240
 }
 
 export function mapClusterHostTypeToBareMetalInstanceType(
@@ -850,6 +1006,13 @@ export function resolveBareMetalComposedRateEstimate(
   instanceTypeId: string | undefined | null,
   diskImageId: string | undefined | null,
   rateCardId = DEFAULT_M360_RATE_CARD_ID,
+  options?: {
+    storageTierId?: string | null
+    bootDiskSizeGiB?: number | null
+    additionalDisks?: ReadonlyArray<{ storageTierId: string; sizeGiB: number }>
+    /** Service used to resolve the hardware flavor rate line. Defaults to bare metal. */
+    serviceId?: M360BillableService
+  },
 ): BareMetalComposedRateEstimate | null {
   const hardwareId = instanceTypeId?.trim()
   const imageId = diskImageId?.trim()
@@ -857,17 +1020,57 @@ export function resolveBareMetalComposedRateEstimate(
     return null
   }
 
-  const hardware = findM360RateLineForPublishSelection('baremetal', hardwareId, rateCardId)
-  const osLicense = findM360OsLicenseRateLine(imageId, rateCardId)
-  if (!hardware || !osLicense) {
+  const serviceId = options?.serviceId ?? 'baremetal'
+  const hardware = findM360RateLineForPublishSelection(serviceId, hardwareId, rateCardId)
+  if (!hardware) {
     return null
   }
+
+  const osLicense =
+    findM360OsLicenseRateLine(imageId, rateCardId) ??
+    ({
+      id: `synthetic-os-${imageId}`,
+      rateCardId,
+      serviceId: 'baremetal',
+      resourceLabel: imageId,
+      resourceShortLabel: imageId,
+      hourlyRate: 0,
+      monthlyRate: 0,
+      currency: hardware.currency,
+      billingUnit: 'per-instance' as const,
+      diskImageId: imageId,
+    } satisfies M360RateLine)
+
+  const storage = resolveStorageRateEstimate(
+    options?.storageTierId ?? 'balanced',
+    options?.bootDiskSizeGiB ?? getDefaultBootDiskSizeGiB(hardwareId),
+  )
+  if (!storage) {
+    return null
+  }
+
+  const additionalStorage = (options?.additionalDisks ?? [])
+    .map((disk) => resolveStorageRateEstimate(disk.storageTierId, disk.sizeGiB))
+    .filter((estimate): estimate is M360StorageRateEstimate => estimate !== null)
+
+  const additionalHourly = additionalStorage.reduce((sum, estimate) => sum + estimate.hourlyRate, 0)
+  const additionalMonthly = additionalStorage.reduce(
+    (sum, estimate) => sum + estimate.monthlyRate,
+    0,
+  )
 
   return {
     hardware,
     osLicense,
-    hourlyRate: Math.round((hardware.hourlyRate + osLicense.hourlyRate) * 100) / 100,
-    monthlyRate: Math.round(hardware.monthlyRate + osLicense.monthlyRate),
+    storage,
+    additionalStorage,
+    hourlyRate:
+      Math.round(
+        (hardware.hourlyRate + osLicense.hourlyRate + storage.hourlyRate + additionalHourly) * 100,
+      ) / 100,
+    monthlyRate: Math.round(
+      hardware.monthlyRate + osLicense.monthlyRate + storage.monthlyRate + additionalMonthly,
+    ),
     currency: hardware.currency,
     rateCardId,
   }
@@ -1103,8 +1306,27 @@ export function formatBareMetalComposedRateBreakdown(
   estimate: BareMetalComposedRateEstimate,
 ): string {
   const hardware = estimate.hardware.hourlyRate.toFixed(2)
-  const os = estimate.osLicense.hourlyRate.toFixed(2)
-  return `Hardware $${hardware}/hr · OS $${os}/hr`
+  const os =
+    estimate.osLicense.hourlyRate <= 0
+      ? 'Included'
+      : `$${estimate.osLicense.hourlyRate.toFixed(2)}/hr`
+  const storageHourly =
+    estimate.storage.hourlyRate +
+    estimate.additionalStorage.reduce((sum, line) => sum + line.hourlyRate, 0)
+  const storage = `$${storageHourly.toFixed(2)}/hr`
+  return `Hardware $${hardware}/hr · OS ${os} · Storage ${storage}`
+}
+
+export function formatStorageRateHourly(estimate: M360StorageRateEstimate): string {
+  return `$${estimate.hourlyRate.toFixed(2)}/hr`
+}
+
+export function formatStorageRateMonthly(estimate: M360StorageRateEstimate): string {
+  return `$${estimate.monthlyRate.toLocaleString('en-US', { maximumFractionDigits: 2 })}/mo`
+}
+
+export function formatStorageRateCardLabel(estimate: M360StorageRateEstimate): string {
+  return `${formatStorageRateHourly(estimate)} · ${estimate.sizeGiB} GiB`
 }
 
 export function formatBareMetalOsLicenseRateLabel(line: M360RateLine): string {

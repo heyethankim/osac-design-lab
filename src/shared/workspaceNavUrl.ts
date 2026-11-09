@@ -41,6 +41,7 @@ export const LANDING_FOCUS_TOPIC_PARAM = 'focus'
 
 export const WORKSPACE_ACTION_CREATE_CATALOG_ITEM = 'create-catalog-item'
 export const WORKSPACE_ACTION_REGISTER_TENANT = 'register-tenant'
+export const WORKSPACE_ACTION_CREATE_SERVICE_ACCOUNT = 'create-service-account'
 
 export const WORKSPACE_WIDTH_MAX = 'max'
 export const WORKSPACE_WIDTH_FULL = 'full'
@@ -48,6 +49,7 @@ export const WORKSPACE_WIDTH_FULL = 'full'
 export type WorkspaceAction =
   | typeof WORKSPACE_ACTION_CREATE_CATALOG_ITEM
   | typeof WORKSPACE_ACTION_REGISTER_TENANT
+  | typeof WORKSPACE_ACTION_CREATE_SERVICE_ACCOUNT
 
 export type WorkspaceWidthMode = typeof WORKSPACE_WIDTH_MAX | typeof WORKSPACE_WIDTH_FULL
 
@@ -249,7 +251,9 @@ export function syncWorkspaceNavParam(
     const shouldClearAction =
       showLanding ||
       (action === WORKSPACE_ACTION_CREATE_CATALOG_ITEM && navId !== 'catalog') ||
-      (action === WORKSPACE_ACTION_REGISTER_TENANT && navId !== 'administration-organizations')
+      (action === WORKSPACE_ACTION_REGISTER_TENANT && navId !== 'administration-organizations') ||
+      (action === WORKSPACE_ACTION_CREATE_SERVICE_ACCOUNT &&
+        navId !== 'administration-service-accounts')
     const hasAction = Boolean(action)
 
     if (
@@ -309,6 +313,17 @@ export function syncWorkspaceCatalogItemParam(
   }, options)
 }
 
+function getWorkspaceActionNav(action: WorkspaceAction): string {
+  switch (action) {
+    case WORKSPACE_ACTION_CREATE_CATALOG_ITEM:
+      return 'catalog'
+    case WORKSPACE_ACTION_CREATE_SERVICE_ACCOUNT:
+      return 'administration-service-accounts'
+    case WORKSPACE_ACTION_REGISTER_TENANT:
+      return 'administration-organizations'
+  }
+}
+
 /** Open or close a create/register wizard via `?action=`. */
 export function syncWorkspaceActionParam(
   setSearchParams: SetURLSearchParams,
@@ -326,27 +341,65 @@ export function syncWorkspaceActionParam(
       return next
     }
 
-    if (currentAction === action) {
-      const expectedNav =
-        action === WORKSPACE_ACTION_CREATE_CATALOG_ITEM
-          ? 'catalog'
-          : 'administration-organizations'
-      if (current.get('nav') === expectedNav) {
-        return current
-      }
+    const expectedNav = getWorkspaceActionNav(action)
+    if (currentAction === action && current.get('nav') === expectedNav) {
+      return current
     }
 
     const next = new URLSearchParams(current)
+    next.set('nav', expectedNav)
     if (action === WORKSPACE_ACTION_CREATE_CATALOG_ITEM) {
-      next.set('nav', 'catalog')
       next.delete(WORKSPACE_CATALOG_ITEM_PARAM)
-    } else {
-      next.set('nav', 'administration-organizations')
+    } else if (action === WORKSPACE_ACTION_REGISTER_TENANT) {
       next.delete(WORKSPACE_ORGANIZATION_PARAM)
     }
     next.set(WORKSPACE_ACTION_PARAM, action)
     return next
   }, options)
+}
+
+/** Tenant Admin → Service accounts (Design Lab deep link). */
+export function buildTenantAdminServiceAccountsPath(options?: {
+  tenant?: string
+  topic?: string
+  design?: string
+  fromDesignHub?: boolean
+}): string {
+  const tenant = options?.tenant?.trim() || 'northsummit'
+  const params = new URLSearchParams({
+    nav: 'administration-service-accounts',
+  })
+  if (options?.fromDesignHub !== false) {
+    params.set(WORKSPACE_HUB_PARAM, WORKSPACE_HUB_VALUE)
+  }
+  if (options?.topic) {
+    params.set(WORKSPACE_TOPIC_PARAM, options.topic)
+  }
+  if (options?.design) {
+    params.set(WORKSPACE_DESIGN_PARAM, options.design)
+  }
+  return `/tenant-admin/${tenant}/workspace?${params.toString()}`
+}
+
+/** Provider Admin → Tenants (External billing ID Design Lab deep link). */
+export function buildProviderOrganizationsPath(options?: {
+  topic?: string
+  design?: string
+  fromDesignHub?: boolean
+}): string {
+  const params = new URLSearchParams({
+    nav: 'administration-organizations',
+  })
+  if (options?.fromDesignHub !== false) {
+    params.set(WORKSPACE_HUB_PARAM, WORKSPACE_HUB_VALUE)
+  }
+  if (options?.topic) {
+    params.set(WORKSPACE_TOPIC_PARAM, options.topic)
+  }
+  if (options?.design) {
+    params.set(WORKSPACE_DESIGN_PARAM, options.design)
+  }
+  return `/provider/workspace?${params.toString()}`
 }
 
 /** Open or close a service instance detail via `?instance=`. */

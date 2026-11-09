@@ -95,7 +95,6 @@ export function ProviderAdminRateCardsPage() {
   return (
     <div className="provider-admin-workspace-page provider-admin-billing provider-admin-rate-cards">
       <ProviderAdminWorkspacePageHeader
-        kicker="Administration"
         title="Rates"
         lede="Browse M360 billable rates by service."
         action={

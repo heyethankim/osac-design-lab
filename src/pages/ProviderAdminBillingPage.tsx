@@ -88,7 +88,6 @@ export function ProviderAdminBillingPage() {
   return (
     <div className="provider-admin-workspace-page provider-admin-billing">
       <ProviderAdminWorkspacePageHeader
-        kicker="Administration"
         title="Billing"
         lede="Account status comes from M360. Linked tenants are M360 accounts with an External ID set for OSAC."
         action={

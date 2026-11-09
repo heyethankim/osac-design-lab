@@ -60,20 +60,29 @@ select.pf-v6-c-form-control {
 }
 
 .bmaas-app-shell__main {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
   position: relative;
 }
 
-/* When the hub stripe is present, Page must fill remaining shell height — not 100dvh. */
-.bmaas-app-shell:has(.bmaas-design-hub-banner) .pf-v6-c-page {
-  height: 100%;
-  max-height: 100%;
+/*
+ * PatternFly Page must flex-fill the shell. A percentage `height: 100%` does not
+ * resolve against this flex item (computed height stays content-sized ~560px),
+ * which clips card footers and page bottoms under the hub stripe.
+ */
+.bmaas-app-shell__main > .pf-v6-c-page {
+  flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  min-height: 0;
 }
 
-.bmaas-app-shell__main:has(.nav-compare) {
-  display: flex;
-  flex-direction: column;
+/* When the hub stripe is present, keep Page within the remaining shell — not 100dvh. */
+.bmaas-app-shell:has(.bmaas-design-hub-banner) .pf-v6-c-page {
+  max-height: 100%;
+  height: auto;
 }
 
 .bmaas-app-shell__main > .nav-compare {
@@ -81,16 +90,89 @@ select.pf-v6-c-form-control {
   min-height: 0;
 }
 
-/* Prototype chrome — black stripe; magenta only on Back to home pill. */
+/* Prototype chrome — black stripe; magenta Back to home; design switches centered. */
 .bmaas-design-hub-banner {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: flex-start;
+  column-gap: var(--pf-t--global--spacer--md);
   flex-shrink: 0;
   min-height: 2rem;
   padding-inline: var(--pf-t--global--spacer--md);
   background-color: #151515;
   box-sizing: border-box;
+}
+
+.bmaas-design-hub-banner__start {
+  justify-self: start;
+  min-width: 0;
+}
+
+.bmaas-design-hub-banner__center {
+  justify-self: center;
+  min-width: 0;
+}
+
+.bmaas-design-hub-banner__end {
+  justify-self: end;
+  min-width: 0;
+}
+
+.bmaas-design-hub-banner__designs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.bmaas-design-hub-banner__design {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.45rem;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 0.2rem;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.bmaas-design-hub-banner__design:hover,
+.bmaas-design-hub-banner__design:focus-visible {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.08);
+  text-decoration: none;
+}
+
+.bmaas-design-hub-banner__design--current {
+  border-color: #ee00ea;
+  background: #ee00ea;
+  color: #fff;
+  font-weight: 700;
+}
+
+.bmaas-design-hub-banner__design--current:hover,
+.bmaas-design-hub-banner__design--current:focus-visible {
+  border-color: #ff4af8;
+  background: #ff4af8;
+  color: #fff;
+}
+
+.bmaas-design-hub-banner__design--unavailable {
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.35);
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .bmaas-design-hub-banner__link {
@@ -143,12 +225,16 @@ select.pf-v6-c-form-control {
 
 @media (prefers-reduced-motion: reduce) {
   .bmaas-design-hub-banner__link,
-  .bmaas-design-hub-banner__arrow {
+  .bmaas-design-hub-banner__arrow,
+  .bmaas-design-hub-banner__design {
     transition: none;
   }
 }
 
 .bmaas-role-landing {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
   min-height: 100dvh;
   width: 100%;
   box-sizing: border-box;
@@ -158,6 +244,19 @@ select.pf-v6-c-form-control {
 
 .bmaas-role-landing__wrap {
   width: min(72rem, 100%);
+  min-height: calc(
+    100dvh - var(--pf-t--global--spacer--2xl) - var(--pf-t--global--spacer--3xl)
+  );
+}
+
+.bmaas-landing-main {
+  width: 100%;
+  min-width: 0;
+}
+
+.bmaas-landing-results {
+  width: 100%;
+  min-height: 24rem;
 }
 
 .bmaas-landing-section-heading {
@@ -177,6 +276,48 @@ select.pf-v6-c-form-control {
   font-size: var(--pf-t--global--font--size--body--sm);
   font-weight: var(--pf-t--global--font--weight--body--bold);
   line-height: 1;
+}
+
+.bmaas-landing-toolbar {
+  align-items: center;
+  min-height: 2.5rem;
+  margin-block-end: var(--pf-t--global--spacer--xl);
+}
+
+.bmaas-landing-search.catalog-search {
+  flex: 1 1 22rem;
+  width: min(100%, 28rem);
+  max-width: 28rem;
+}
+
+.bmaas-landing-search .pf-v6-c-search-input {
+  min-height: 2.25rem;
+}
+
+.bmaas-landing-topic-table {
+  --pf-v6-c-table--m-compact__td--PaddingBlockEnd: var(--pf-t--global--spacer--md);
+  --pf-v6-c-table--m-compact__td--PaddingBlockStart: var(--pf-t--global--spacer--md);
+}
+
+.bmaas-landing-topic-table .bmaas-landing-topic-card__links {
+  flex-wrap: nowrap;
+  gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+}
+
+.bmaas-landing-topic-table .bmaas-landing-topic-card__links li,
+.bmaas-landing-topic-table .bmaas-landing-topic-card__link-muted {
+  white-space: nowrap;
+}
+
+.bmaas-landing-topic-row__updated {
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+
+.bmaas-landing-empty {
+  margin-block: 0;
+  justify-content: flex-start;
+  padding-block-start: var(--pf-t--global--spacer--md);
 }
 
 .bmaas-landing-topic-grid {
@@ -328,18 +469,6 @@ select.pf-v6-c-form-control {
 
 .bmaas-role-landing__prototype-link-prefix .pf-v6-c-button.pf-m-link {
   margin-inline-end: 0;
-}
-
-.bmaas-role-landing__credits {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--pf-t--global--spacer--xs);
-}
-
-.bmaas-role-landing__credits .pf-v6-c-content,
-.bmaas-role-landing__credits p {
-  margin: 0;
 }
 
 .bmaas-role-landing__icon-wrap {

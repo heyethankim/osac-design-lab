@@ -127,13 +127,10 @@ import {
   findM360OsLicenseRateLine,
   findM360RateLineForPublishSelection,
   formatBareMetalOsLicenseRateLabel,
-  formatClusterTopologyWorkerLineLabel,
   formatM360RateLineSummary,
-  getM360RateCardDisplayName,
-  mapClusterHostTypeToBareMetalInstanceType,
   getDefaultClusterWorkerCount,
+  mapClusterHostTypeToBareMetalInstanceType,
   resolveBareMetalComposedRateEstimate,
-  resolveMultiClusterComposedRateEstimate,
 } from '../../billing/m360RateLines'
 import { LaunchCostPanel } from '../billing/LaunchCostPanel'
 import { CatalogDiskImageValue } from '../catalog/CatalogDiskImageValue'
@@ -1593,23 +1590,6 @@ export function TenantUserLaunchInstanceWizard({
     return line ? formatBareMetalOsLicenseRateLabel(line) : 'No OS rate'
   }
 
-  const resolvedLaunchBareMetalComposedRate = useMemo(() => {
-    if (!isBareMetalCatalogItem) {
-      return null
-    }
-    return resolveBareMetalComposedRateEstimate(
-      form.instanceType || catalogItem.instanceTypeId,
-      form.diskImageId || catalogItem.diskImageId,
-      DEFAULT_M360_RATE_CARD_ID,
-    )
-  }, [
-    catalogItem.diskImageId,
-    catalogItem.instanceTypeId,
-    form.diskImageId,
-    form.instanceType,
-    isBareMetalCatalogItem,
-  ])
-
   const renderBareMetalHardwareStep = () => {
     const lockedInstanceTypeLabel =
       formatBaremetalInstanceTypeLabel(form.instanceType) ||
@@ -1812,65 +1792,6 @@ export function TenantUserLaunchInstanceWizard({
           })}
         </div>
       </FormGroup>
-
-      <div className="provider-setup-template__cluster-estimate" aria-live="polite">
-        {resolvedLaunchBareMetalComposedRate ? (
-          <>
-            <div className="provider-setup-template__cluster-estimate-header">
-              <Content component="p" className="provider-setup-template__cluster-estimate-label">
-                Estimated total
-              </Content>
-              <div className="provider-setup-template__cluster-estimate-totals">
-                <span className="provider-setup-template__cluster-estimate-hourly">
-                  ${resolvedLaunchBareMetalComposedRate.hourlyRate.toFixed(2)}
-                  <span className="provider-setup-template__cluster-estimate-unit">/hr</span>
-                </span>
-                <span className="provider-setup-template__cluster-estimate-monthly">
-                  $
-                  {resolvedLaunchBareMetalComposedRate.monthlyRate.toLocaleString('en-US', {
-                    maximumFractionDigits: 0,
-                  })}
-                  /mo
-                </span>
-              </div>
-            </div>
-            <DescriptionList
-              isCompact
-              isHorizontal
-              className="provider-setup-template__cluster-estimate-breakdown"
-              aria-label="Estimated rate breakdown"
-            >
-              <DescriptionListGroup>
-                <DescriptionListTerm>Hardware</DescriptionListTerm>
-                <DescriptionListDescription>
-                  ${resolvedLaunchBareMetalComposedRate.hardware.hourlyRate.toFixed(2)}/hr
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-              <DescriptionListGroup>
-                <DescriptionListTerm>OS license</DescriptionListTerm>
-                <DescriptionListDescription>
-                  {resolvedLaunchBareMetalComposedRate.osLicense.hourlyRate <= 0
-                    ? 'Included'
-                    : `$${resolvedLaunchBareMetalComposedRate.osLicense.hourlyRate.toFixed(2)}/hr`}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-            </DescriptionList>
-            <Content component="p" className="provider-setup-template__cluster-estimate-meta">
-              {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}
-            </Content>
-          </>
-        ) : (
-          <>
-            <Content component="p" className="provider-setup-template__cluster-estimate-label">
-              Estimated total
-            </Content>
-            <Content component="p" className="provider-setup-template__cluster-estimate-meta">
-              Missing hardware or OS rates on{' '}
-              {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}.
-            </Content>
-          </>
-        )}
-      </div>
     </div>
     )
   }
@@ -1939,25 +1860,6 @@ export function TenantUserLaunchInstanceWizard({
       </div>
     )
   }
-
-  const resolvedLaunchClusterComposedRate = useMemo(() => {
-    if (!isClusterCatalogItem || form.nodeSets.length === 0) {
-      return null
-    }
-    return resolveMultiClusterComposedRateEstimate(
-      form.nodeSets.map((nodeSet) => ({
-        nodeSetId: nodeSet.nodeSetId.trim() || catalogDefaultNodeSetId,
-        hostTypeId: nodeSet.hostType.trim() || catalogDefaultHostType,
-        workerCount: nodeSet.nodeCount,
-      })),
-      DEFAULT_M360_RATE_CARD_ID,
-    )
-  }, [
-    catalogDefaultHostType,
-    catalogDefaultNodeSetId,
-    form.nodeSets,
-    isClusterCatalogItem,
-  ])
 
   const resolveClusterHostTypeM360RateLabel = (hostTypeId: string): string => {
     const bareMetalInstanceTypeId = mapClusterHostTypeToBareMetalInstanceType(hostTypeId)
@@ -2227,68 +2129,6 @@ export function TenantUserLaunchInstanceWizard({
           {CLUSTER_LAUNCH_INSTANCE_DEMO.addNodeSetLabel}
         </Button>
       ) : null}
-
-      <div className="provider-setup-template__cluster-estimate" aria-live="polite">
-        {resolvedLaunchClusterComposedRate ? (
-          <>
-            <div className="provider-setup-template__cluster-estimate-header">
-              <Content component="p" className="provider-setup-template__cluster-estimate-label">
-                Estimated total
-              </Content>
-              <div className="provider-setup-template__cluster-estimate-totals">
-                <span className="provider-setup-template__cluster-estimate-hourly">
-                  ${resolvedLaunchClusterComposedRate.hourlyRate.toFixed(2)}
-                  <span className="provider-setup-template__cluster-estimate-unit">/hr</span>
-                </span>
-                <span className="provider-setup-template__cluster-estimate-monthly">
-                  $
-                  {resolvedLaunchClusterComposedRate.monthlyRate.toLocaleString('en-US', {
-                    maximumFractionDigits: 0,
-                  })}
-                  /mo
-                </span>
-              </div>
-            </div>
-            <DescriptionList
-              isCompact
-              isHorizontal
-              className="provider-setup-template__cluster-estimate-breakdown"
-              aria-label="Estimated rate breakdown"
-            >
-              <DescriptionListGroup>
-                <DescriptionListTerm>Control plane</DescriptionListTerm>
-                <DescriptionListDescription>
-                  ${resolvedLaunchClusterComposedRate.controlPlane.hourlyRate.toFixed(2)}/hr
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-              {resolvedLaunchClusterComposedRate.workerLines.map((line) => (
-                <DescriptionListGroup key={`${line.nodeSetId}-${line.hostTypeId}`}>
-                  <DescriptionListTerm>
-                    {formatClusterNodeSetLabel(line.nodeSetId)}:{' '}
-                    {formatClusterTopologyWorkerLineLabel(line)}
-                  </DescriptionListTerm>
-                  <DescriptionListDescription>
-                    ${line.hourlySubtotal.toFixed(2)}/hr
-                  </DescriptionListDescription>
-                </DescriptionListGroup>
-              ))}
-            </DescriptionList>
-            <Content component="p" className="provider-setup-template__cluster-estimate-meta">
-              {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}
-            </Content>
-          </>
-        ) : (
-          <>
-            <Content component="p" className="provider-setup-template__cluster-estimate-label">
-              Estimated total
-            </Content>
-            <Content component="p" className="provider-setup-template__cluster-estimate-meta">
-              Missing control-plane or worker rates on{' '}
-              {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}.
-            </Content>
-          </>
-        )}
-      </div>
     </div>
   )
 
