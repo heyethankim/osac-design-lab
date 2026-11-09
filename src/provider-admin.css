@@ -7577,6 +7577,14 @@ html[data-wizard-width='max'] .catalog-wizard-page__wizard.pf-v6-c-wizard .pf-v6
   overflow: visible;
 }
 
+/* Register / Edit tenant — match catalog create: no outer wizard card border */
+.catalog-wizard-page--register-tenant .catalog-wizard-page__wizard.pf-v6-c-wizard {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
 .catalog-wizard-page--create-vm .catalog-wizard-page__wizard.pf-v6-c-wizard
   .pf-v6-c-wizard__main-body {
   padding-block-start: var(--pf-t--global--spacer--sm);

@@ -4,6 +4,7 @@ import {
   buildProviderOrganizationsPath,
   buildTenantAdminServiceAccountsPath,
   NAVIGATION_STRUCTURE_TOPIC_ID,
+  WORKSPACE_ACTION_REGISTER_TENANT,
   WORKSPACE_DESIGN_MULTI_SERVICE,
   WORKSPACE_DESIGN_PARAM,
   WORKSPACE_DESIGN_VM_NO_SERVICE,
@@ -37,13 +38,25 @@ function widthParamIs(searchParams: URLSearchParams, value: string): boolean {
 /** Design options available in the hub banner for a topic (when opened with hub=1). */
 export const DESIGN_HUB_TOPIC_OPTIONS: Record<string, readonly DesignHubOption[]> = {
   [TOPIC_EXTERNAL_BILLING_ID]: [
-    { key: '1', label: 'Design 1', isCurrent: (_p, s) => designParamIs(s, '1') },
-    { key: '2', label: 'Design 2', isCurrent: (_p, s) => designParamIs(s, '2') },
     {
-      key: '3',
-      label: 'Design 3',
-      to: buildProviderOrganizationsPath({ topic: TOPIC_EXTERNAL_BILLING_ID, design: '3' }),
-      isCurrent: (_p, s) => designParamIs(s, '3') || !s.get(WORKSPACE_DESIGN_PARAM),
+      key: '1',
+      label: 'Design 1',
+      to: buildProviderOrganizationsPath({
+        topic: TOPIC_EXTERNAL_BILLING_ID,
+        design: '1',
+        action: WORKSPACE_ACTION_REGISTER_TENANT,
+      }),
+      isCurrent: (_p, s) => designParamIs(s, '1') || !s.get(WORKSPACE_DESIGN_PARAM),
+    },
+    {
+      key: '2',
+      label: 'Design 2',
+      to: buildProviderOrganizationsPath({
+        topic: TOPIC_EXTERNAL_BILLING_ID,
+        design: '2',
+        action: WORKSPACE_ACTION_REGISTER_TENANT,
+      }),
+      isCurrent: (_p, s) => designParamIs(s, '2'),
     },
   ],
   [TOPIC_SERVICE_ACCOUNTS]: [

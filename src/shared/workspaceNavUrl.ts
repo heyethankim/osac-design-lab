@@ -386,6 +386,8 @@ export function buildProviderOrganizationsPath(options?: {
   topic?: string
   design?: string
   fromDesignHub?: boolean
+  /** Open Register tenant (or another workspace action) immediately. */
+  action?: WorkspaceAction
 }): string {
   const params = new URLSearchParams({
     nav: 'administration-organizations',
@@ -398,6 +400,9 @@ export function buildProviderOrganizationsPath(options?: {
   }
   if (options?.design) {
     params.set(WORKSPACE_DESIGN_PARAM, options.design)
+  }
+  if (options?.action) {
+    params.set(WORKSPACE_ACTION_PARAM, options.action)
   }
   return `/provider/workspace?${params.toString()}`
 }

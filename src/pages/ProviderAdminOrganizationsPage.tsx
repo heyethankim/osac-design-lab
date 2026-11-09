@@ -36,7 +36,11 @@ import { ViewModeToggle } from '../components/catalog/CatalogViewToggle'
 import { getAdministrationViewMode, setAdministrationViewMode, type ViewMode } from '../catalog/viewMode'
 import { OrganizationDetailsPage } from '../components/provider-admin/OrganizationDetailsPage'
 import { ProviderAdminWorkspacePageHeader } from '../components/provider-admin/ProviderAdminWorkspacePageHeader'
-import { TenantOnboardingWizard } from '../components/provider-admin/TenantOnboardingWizard'
+import {
+  TenantOnboardingWizard,
+  type ExternalBillingDesignVariant,
+} from '../components/provider-admin/TenantOnboardingWizard'
+import { TOPIC_EXTERNAL_BILLING_ID } from '../designHub/topics'
 import { SetupIdentityProviderWizard } from '../components/provider-admin/SetupIdentityProviderWizard'
 import { AddTenantAdministratorWizard } from '../components/tenant-admin/AddTenantAdministratorWizard'
 import { IdpManagerIdentityProviderPage } from './idp-manager/IdpManagerIdentityProviderPage'
@@ -142,6 +146,11 @@ export function ProviderAdminOrganizationsPage({
   onNavigate?: (navId: ProviderAdminNavId) => void
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
+  const externalBillingDesignParam = searchParams.get('design')?.trim() ?? ''
+  const externalBillingTopicActive =
+    searchParams.get('topic')?.trim() === TOPIC_EXTERNAL_BILLING_ID
+  const billingDesignVariant: ExternalBillingDesignVariant =
+    externalBillingTopicActive && externalBillingDesignParam === '2' ? 'option-b' : 'option-a'
   const [organizations, setOrganizations] = useState<RegisteredOrganization[]>(() =>
     ensureProviderDemoOrganizations(),
   )
@@ -249,10 +258,15 @@ export function ProviderAdminOrganizationsPage({
       return
     }
 
+    const designParam = searchParams.get('design')?.trim()
+    const openOnBillingStep =
+      searchParams.get('topic')?.trim() === TOPIC_EXTERNAL_BILLING_ID &&
+      (designParam === '1' || designParam === '2' || !designParam)
+
     setEditingOrganization(null)
     setEditReturnToDetails(false)
     setOnboardingResumeOrganization(null)
-    setOnboardingInitialStepId('general')
+    setOnboardingInitialStepId(openOnBillingStep ? 'billing_account' : 'general')
     setIsDetailsOpen(false)
     setIsOnboardingWizardOpen(true)
   }, [searchParams])
@@ -596,6 +610,7 @@ export function ProviderAdminOrganizationsPage({
           resumeOrganization={onboardingResumeOrganization}
           editingOrganization={editingOrganization}
           initialStepId={onboardingInitialStepId}
+          billingDesignVariant={billingDesignVariant}
           onClose={closeOnboardingWizard}
           onPersistOrganization={handleOnboardingPersist}
           onComplete={handleOnboardingComplete}
