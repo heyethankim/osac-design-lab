@@ -84,11 +84,6 @@ export const DESIGN_HUB_TOPIC_OPTIONS: Record<string, readonly DesignHubOption[]
       }),
       isCurrent: (_p, s) => designParamIs(s, WORKSPACE_DESIGN_MULTI_SERVICE),
     },
-    {
-      key: '3',
-      label: 'Design 3',
-      isCurrent: (_p, s) => designParamIs(s, '3'),
-    },
   ],
   [TOPIC_FULL_VS_MAX_WIDTH]: [
     {
