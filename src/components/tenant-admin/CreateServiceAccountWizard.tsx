@@ -33,6 +33,7 @@ import {
 } from '../networking/NetworkInventoryCreateWizardShell'
 import { NETWORK_INVENTORY_CREATE_REVIEW_STEP } from '../../networking/networkInventoryCreateWizard'
 import { KUBERNETES_RESOURCE_NAME_MAX_LENGTH } from '../../shared/kubernetesResourceName'
+import { useWorkspaceWizardStepUrl } from '../../shared/useWorkspaceWizardStepUrl'
 
 type CreateServiceAccountForm = {
   name: string
@@ -115,6 +116,12 @@ export function CreateServiceAccountWizard({
     Boolean(selectedProject)
   const hasEditChanges = Boolean(editBaseline && !formsEqual(form, editBaseline))
   const canSubmit = isEditMode ? isDetailsStepValid && hasEditChanges : isDetailsStepValid
+
+  const { startIndex: wizardStartIndex, onStepChange } = useWorkspaceWizardStepUrl(
+    true,
+    isOpen,
+    CREATE_SERVICE_ACCOUNT_STEPS,
+  )
 
   useEffect(() => {
     if (!isOpen) {
@@ -316,6 +323,8 @@ export function CreateServiceAccountWizard({
       onClose={handleClose}
       leaveConfirmPrimaryActionLabel={isEditMode ? 'Discard changes' : 'Leave'}
       className="tenant-admin-service-accounts__wizard"
+      startIndex={wizardStartIndex}
+      onStepChange={onStepChange}
     />
   )
 }

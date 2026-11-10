@@ -39,6 +39,10 @@ type NetworkInventoryCreateWizardShellProps = {
   className?: string
   leaveConfirmPrimaryActionLabel?: string
   getStepName?: (step: NetworkInventoryCreateStep) => string
+  /** 1-based PatternFly Wizard start index (e.g. from `?step=`). */
+  startIndex?: number
+  /** Fired when the active step changes; `stepId` is the step's logical id. */
+  onStepChange?: (stepId: string) => void
 }
 
 export function NetworkInventoryCreateWizardShell({
@@ -56,6 +60,8 @@ export function NetworkInventoryCreateWizardShell({
   className,
   leaveConfirmPrimaryActionLabel,
   getStepName,
+  startIndex,
+  onStepChange,
 }: NetworkInventoryCreateWizardShellProps) {
   const leaveAfterCloseRef = useRef<(() => void) | null>(null)
   const { requestClose, leaveConfirmModal, wrapStepFooter } = useWizardLeaveConfirm({
@@ -87,7 +93,7 @@ export function NetworkInventoryCreateWizardShell({
 
   const wizard = (
     <Wizard
-      key={titleId}
+      key={`${titleId}-${startIndex ?? 1}-${steps.map((step) => step.id).join('|')}`}
       className={[
         presentation === 'page' ? 'catalog-wizard-page__wizard' : undefined,
         'provider-admin-network-inventory__wizard',
@@ -97,7 +103,18 @@ export function NetworkInventoryCreateWizardShell({
         .join(' ')}
       height={presentation === 'modal' ? '40rem' : '100%'}
       isPlain={presentation === 'page'}
+      startIndex={startIndex}
       onClose={presentation === 'modal' ? requestClose : undefined}
+      onStepChange={
+        onStepChange
+          ? (_event, currentStep) => {
+              const stepId = String(currentStep?.id ?? '').replace('network-create-step-', '')
+              if (steps.some((step) => step.id === stepId)) {
+                onStepChange(stepId)
+              }
+            }
+          : undefined
+      }
       header={
         presentation === 'modal' ? (
           <WizardHeader

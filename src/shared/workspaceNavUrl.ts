@@ -77,7 +77,9 @@ export type SyncWorkspaceNavOptions = NavigateOptions & {
 
 function isWorkspaceAction(value: string | null | undefined): value is WorkspaceAction {
   return (
-    value === WORKSPACE_ACTION_CREATE_CATALOG_ITEM || value === WORKSPACE_ACTION_REGISTER_TENANT
+    value === WORKSPACE_ACTION_CREATE_CATALOG_ITEM ||
+    value === WORKSPACE_ACTION_REGISTER_TENANT ||
+    value === WORKSPACE_ACTION_CREATE_SERVICE_ACCOUNT
   )
 }
 
@@ -112,6 +114,23 @@ export function getWorkspaceWidthParam(searchParams: URLSearchParams): Workspace
 export function getWorkspaceStepParam(searchParams: URLSearchParams): string | null {
   const value = searchParams.get(WORKSPACE_STEP_PARAM)?.trim()
   return value || null
+}
+
+/**
+ * Resolve 1-based PatternFly Wizard `startIndex` from `?step=`.
+ * Falls back to `fallbackIndex` (default 1) when missing or unknown.
+ */
+export function resolveWorkspaceWizardStartIndex(
+  steps: readonly { id: string }[],
+  stepParam: string | null | undefined,
+  fallbackIndex = 1,
+): number {
+  if (!stepParam || steps.length === 0) {
+    return fallbackIndex
+  }
+
+  const index = steps.findIndex((step) => step.id === stepParam)
+  return index >= 0 ? index + 1 : fallbackIndex
 }
 
 export function getWorkspaceServiceParam(searchParams: URLSearchParams): string | null {
@@ -333,11 +352,12 @@ export function syncWorkspaceActionParam(
   setSearchParams((current) => {
     const currentAction = getWorkspaceActionParam(current)
     if (!action) {
-      if (!currentAction) {
+      if (!currentAction && !current.has(WORKSPACE_STEP_PARAM)) {
         return current
       }
       const next = new URLSearchParams(current)
       next.delete(WORKSPACE_ACTION_PARAM)
+      next.delete(WORKSPACE_STEP_PARAM)
       return next
     }
 
@@ -354,6 +374,35 @@ export function syncWorkspaceActionParam(
       next.delete(WORKSPACE_ORGANIZATION_PARAM)
     }
     next.set(WORKSPACE_ACTION_PARAM, action)
+    // Wizard components set `?step=` after open; clear any stale step from a prior flow.
+    next.delete(WORKSPACE_STEP_PARAM)
+    return next
+  }, options)
+}
+
+/** Keep `?step=` in sync with the active wizard step. */
+export function syncWorkspaceStepParam(
+  setSearchParams: SetURLSearchParams,
+  stepId: string | null,
+  options?: NavigateOptions,
+): void {
+  setSearchParams((current) => {
+    const currentStep = getWorkspaceStepParam(current)
+    if (!stepId) {
+      if (!currentStep) {
+        return current
+      }
+      const next = new URLSearchParams(current)
+      next.delete(WORKSPACE_STEP_PARAM)
+      return next
+    }
+
+    if (currentStep === stepId) {
+      return current
+    }
+
+    const next = new URLSearchParams(current)
+    next.set(WORKSPACE_STEP_PARAM, stepId)
     return next
   }, options)
 }

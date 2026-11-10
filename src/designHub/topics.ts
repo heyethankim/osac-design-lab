@@ -60,13 +60,11 @@ export const DESIGN_HUB_TOPIC_OPTIONS: Record<string, readonly DesignHubOption[]
     },
   ],
   [TOPIC_SERVICE_ACCOUNTS]: [
-    { key: '1', label: 'Design 1', isCurrent: (_p, s) => designParamIs(s, '1') },
-    { key: '2', label: 'Design 2', isCurrent: (_p, s) => designParamIs(s, '2') },
     {
-      key: '3',
-      label: 'Design 3',
-      to: buildTenantAdminServiceAccountsPath({ topic: TOPIC_SERVICE_ACCOUNTS, design: '3' }),
-      isCurrent: (_p, s) => designParamIs(s, '3') || !s.get(WORKSPACE_DESIGN_PARAM),
+      key: '1',
+      label: 'Design',
+      to: buildTenantAdminServiceAccountsPath({ topic: TOPIC_SERVICE_ACCOUNTS, design: '1' }),
+      isCurrent: (_p, s) => designParamIs(s, '1') || !s.get(WORKSPACE_DESIGN_PARAM),
     },
   ],
   [TOPIC_NAVIGATION_STRUCTURE]: [
