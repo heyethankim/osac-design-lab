@@ -256,7 +256,7 @@ select.pf-v6-c-form-control {
 
 .bmaas-landing-resources {
   width: 100%;
-  padding-block-start: var(--pf-t--global--spacer--sm);
+  padding-block-start: var(--pf-t--global--spacer--xl);
   border-block-start: var(--pf-t--global--border--width--divider--default) solid
     var(--pf-t--global--border--color--default);
 }
