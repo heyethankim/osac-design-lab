@@ -141,10 +141,6 @@ const LANDING_TOPICS: TopicCard[] = [
     description: 'Compare alternative designs for creating a catalog item.',
     status: 'In review',
     isGoldPattern: true,
-    jira: {
-      key: 'HPUX-2369',
-      href: 'https://redhat.atlassian.net/browse/HPUX-2369',
-    },
     authors: 'Ethan Kim',
     updated: BMAAS_LANDING_LAST_UPDATED,
     personas: ['Provider Admin'],
