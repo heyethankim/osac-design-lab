@@ -83,6 +83,8 @@ type TopicCard = {
   status: TopicStatus
   /** Topic implements or extends the Golden / canonical PatternFly UI pattern. */
   isGoldPattern?: boolean
+  /** Omit from landing sections while keeping the topic definition for later. */
+  hidden?: boolean
   jira?: {
     key: string
     href: string
@@ -153,6 +155,7 @@ const LANDING_TOPICS: TopicCard[] = [
     description: 'Compare alternative designs for creating a catalog item.',
     status: 'In progress',
     isGoldPattern: true,
+    hidden: true,
     authors: 'Ethan Kim',
     updated: BMAAS_LANDING_LAST_UPDATED,
     personas: ['Provider Admin'],
@@ -416,7 +419,10 @@ export function BmaasLandingPage() {
   const [viewMode, setViewMode] = useState<ViewMode>(() => getLandingViewMode())
 
   const filteredTopics = useMemo(
-    () => LANDING_TOPICS.filter((topic) => topicMatchesQuery(topic, searchValue)),
+    () =>
+      LANDING_TOPICS.filter(
+        (topic) => !topic.hidden && topicMatchesQuery(topic, searchValue),
+      ),
     [searchValue],
   )
 

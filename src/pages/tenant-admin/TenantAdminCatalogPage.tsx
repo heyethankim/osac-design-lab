@@ -1077,11 +1077,7 @@ export function TenantAdminCatalogPage({
               >
                 <DropdownList>
                   {CATALOG_SERVICE_FILTERS.map((service) => (
-                    <DropdownItem
-                      key={service.id}
-                      value={service.id}
-                      onClick={() => openCreateWizard(service.id)}
-                    >
+                    <DropdownItem key={service.id} value={service.id}>
                       {service.label}
                     </DropdownItem>
                   ))}
