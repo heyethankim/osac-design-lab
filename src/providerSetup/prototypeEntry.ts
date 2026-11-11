@@ -9,6 +9,12 @@ import {
   CLUSTER_NODE_SETS_RATE_CARD,
   CLUSTER_NODE_SETS_TEMPLATE_NAME,
   CLUSTER_NODE_SETS_TEMPLATE_REF_ID,
+  LEGACY_VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID,
+  VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID,
+  VM_NETWORK_ATTACHMENTS_DISPLAY_NAME,
+  VM_NETWORK_ATTACHMENTS_RATE_CARD,
+  VM_NETWORK_ATTACHMENTS_TEMPLATE_NAME,
+  VM_NETWORK_ATTACHMENTS_TEMPLATE_REF_ID,
 } from '../catalog/catalogSpecs'
 import {
   DEFAULT_CLUSTER_CATALOG_VERSION_ID,
@@ -21,9 +27,11 @@ import {
   formatClusterPlatformLabel,
 } from '../catalog/catalogPublishConfig'
 import {
-  clearProviderCatalogDraft,
+  addProviderCatalogItem,
   getProviderCatalogDraft,
   getProviderCatalogItems,
+  getProviderSelectedServices,
+  patchProviderCatalogItem,
   setProviderActiveNav,
   setProviderSelectedServices,
   setProviderSetupComplete,
@@ -38,8 +46,31 @@ import {
   SECOND_CATALOG_ITEM_DISPLAY_NAME,
   parseRateCardFromForm,
 } from './templateDemo'
+import { DEFAULT_PROVIDER_SERVICE_SELECTION, type ProviderServiceId } from './constants'
 import { DEMO_HARBORLINE_CAPITAL_TENANT_ID } from '../providerAdmin/organizations'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
+
+export const MODEL_SERVING_CATALOG_ITEM_ID = DEMO_CATALOG_ITEM_IDS.modelServing
+export const MODEL_SERVING_DISPLAY_NAME = 'model-serving-endpoint'
+export const MODEL_SERVING_TEMPLATE_REF_ID = 'model-serving-standard'
+export const MODEL_SERVING_TEMPLATE_NAME = 'standard-model-serving-template'
+export const MODEL_SERVING_RATE_CARD = {
+  hourlyRate: 0.18,
+  monthlyRate: 120,
+  currency: 'USD',
+  billingUnit: 'per-instance' as const,
+}
+
+export const VM_GENERAL_PURPOSE_CATALOG_ITEM_ID = DEMO_CATALOG_ITEM_IDS.vmGeneralPurpose
+export const VM_GENERAL_PURPOSE_DISPLAY_NAME = 'general-purpose-rhel-vm'
+export const VM_GENERAL_PURPOSE_TEMPLATE_REF_ID = 'vm-general-purpose'
+export const VM_GENERAL_PURPOSE_TEMPLATE_NAME = 'general-purpose-rhel-vm'
+export const VM_GENERAL_PURPOSE_RATE_CARD = {
+  hourlyRate: 2.4,
+  monthlyRate: 1610,
+  currency: 'USD',
+  billingUnit: 'per-instance' as const,
+}
 
 /** Stable demo IDs so ensure can re-seed without creating duplicates. */
 export const BARE_METAL_GPU_CATALOG_ITEM_ID = 'cat-bm-gpu-training'
@@ -65,6 +96,9 @@ export const DEMO_CATALOG_ITEM_ORDER = [
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+  VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID,
+  VM_GENERAL_PURPOSE_CATALOG_ITEM_ID,
+  MODEL_SERVING_CATALOG_ITEM_ID,
 ] as const
 
 function demoCatalogItemOrderIndex(catalogItemId: string): number {
@@ -165,32 +199,205 @@ export function createClusterNodeSetsCatalogDraft(): ProviderCatalogDraft {
     hostTypeLabel: formatClusterHostTypeLabel(DEFAULT_CLUSTER_HOST_TYPE_ID),
     clusterNodeTopologyMode: 'editable',
     clusterTopology: DEFAULT_CLUSTER_TOPOLOGY_NODE_SETS.map((row) => ({ ...row })),
+    addonOperatorsMode: 'locked',
+    addonOperators: [
+      { operatorId: 'nvidia-gpu-operator', mode: 'mandatory' },
+      { operatorId: 'node-feature-discovery', mode: 'mandatory' },
+    ],
     networkPolicy: createAllEditableCatalogNetworkPolicy(),
     status: 'live',
     createdAt: new Date().toISOString(),
   }
 }
 
+/** Draft helper for Virtual Machine network-attachments offering. */
+export function createVmNetworkAttachmentsCatalogDraft(): ProviderCatalogDraft {
+  return {
+    catalogItemId: VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID,
+    templateRefId: VM_NETWORK_ATTACHMENTS_TEMPLATE_REF_ID,
+    templateName: VM_NETWORK_ATTACHMENTS_TEMPLATE_NAME,
+    displayName: VM_NETWORK_ATTACHMENTS_DISPLAY_NAME,
+    description: CATALOG_ITEM_DESCRIPTIONS_BY_ID[DEMO_CATALOG_ITEM_IDS.vmNetworkAttachments],
+    scope: 'global-public',
+    rateCard: VM_NETWORK_ATTACHMENTS_RATE_CARD,
+    serviceId: 'virtual-machine',
+    instanceTypeId: 'standard',
+    instanceTypeLabel: 'Standard (4 vCPU · 16 GB RAM)',
+    diskImageId: 'rhel-9-4',
+    diskImageLabel: 'RHEL 9.4',
+    hardwareOsMode: 'locked',
+    osImageMode: 'editable',
+    networkPolicy: createAllEditableCatalogNetworkPolicy(),
+    status: 'live',
+    createdAt: new Date().toISOString(),
+  }
+}
+
+/** Draft helper for general-purpose RHEL virtual machine offering. */
+export function createVmGeneralPurposeCatalogDraft(): ProviderCatalogDraft {
+  return {
+    catalogItemId: VM_GENERAL_PURPOSE_CATALOG_ITEM_ID,
+    templateRefId: VM_GENERAL_PURPOSE_TEMPLATE_REF_ID,
+    templateName: VM_GENERAL_PURPOSE_TEMPLATE_NAME,
+    displayName: VM_GENERAL_PURPOSE_DISPLAY_NAME,
+    description: CATALOG_ITEM_DESCRIPTIONS_BY_ID[DEMO_CATALOG_ITEM_IDS.vmGeneralPurpose],
+    scope: 'global-public',
+    rateCard: VM_GENERAL_PURPOSE_RATE_CARD,
+    serviceId: 'virtual-machine',
+    instanceTypeId: 'vm-type-1-medium',
+    instanceTypeLabel: 'Medium (2 vCPU · 10 GB RAM)',
+    diskImageId: 'rhel-9-4',
+    diskImageLabel: 'RHEL 9.4',
+    hardwareOsMode: 'editable',
+    osImageMode: 'editable',
+    networkPolicy: createAllEditableCatalogNetworkPolicy(),
+    status: 'live',
+    createdAt: new Date().toISOString(),
+  }
+}
+
+/** Draft helper for Models as a Service offering. */
+export function createModelServingCatalogDraft(): ProviderCatalogDraft {
+  return {
+    catalogItemId: MODEL_SERVING_CATALOG_ITEM_ID,
+    templateRefId: MODEL_SERVING_TEMPLATE_REF_ID,
+    templateName: MODEL_SERVING_TEMPLATE_NAME,
+    displayName: MODEL_SERVING_DISPLAY_NAME,
+    description: CATALOG_ITEM_DESCRIPTIONS_BY_ID[DEMO_CATALOG_ITEM_IDS.modelServing],
+    scope: 'global-public',
+    rateCard: MODEL_SERVING_RATE_CARD,
+    serviceId: 'models',
+    instanceTypeId: 'model-small',
+    instanceTypeLabel: 'Small',
+    diskImageId: 'vllm-runtime',
+    diskImageLabel: 'vLLM runtime',
+    networkPolicy: createAllEditableCatalogNetworkPolicy(),
+    status: 'live',
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function hasCatalogItemId(items: ProviderCatalogDraft[], catalogItemId: string): boolean {
+  return items.some((item) => item.catalogItemId === catalogItemId)
+}
+
+function hasBareMetalGpuCatalogItem(items: ProviderCatalogDraft[]): boolean {
+  return (
+    hasCatalogItemId(items, BARE_METAL_GPU_CATALOG_ITEM_ID) ||
+    hasCatalogItemId(items, LEGACY_BARE_METAL_GPU_CATALOG_ITEM_ID)
+  )
+}
+
+function hasClusterNodeSetsCatalogItem(items: ProviderCatalogDraft[]): boolean {
+  return hasCatalogItemId(items, CLUSTER_NODE_SETS_CATALOG_ITEM_ID)
+}
+
+function hasVmNetworkAttachmentsCatalogItem(items: ProviderCatalogDraft[]): boolean {
+  return (
+    hasCatalogItemId(items, VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID) ||
+    hasCatalogItemId(items, LEGACY_VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID)
+  )
+}
+
+function hasVmGeneralPurposeCatalogItem(items: ProviderCatalogDraft[]): boolean {
+  return hasCatalogItemId(items, VM_GENERAL_PURPOSE_CATALOG_ITEM_ID)
+}
+
+function hasModelServingCatalogItem(items: ProviderCatalogDraft[]): boolean {
+  return hasCatalogItemId(items, MODEL_SERVING_CATALOG_ITEM_ID)
+}
+
 /**
- * Clears provider catalog items and selected services for the Telus empty-state prototype.
- * Does not seed demo catalog drafts. Org shells remain available.
+ * Ensures demo catalog offerings exist across bare metal, cluster, VM, and models.
  */
 export function ensureProviderCatalogDemoItems(): ProviderCatalogDraft[] {
-  clearProviderCatalogDraft()
-  setProviderSelectedServices([])
   ensureProviderDemoOrganizations()
+
+  let items = getProviderCatalogItems()
+
+  if (!hasBareMetalGpuCatalogItem(items)) {
+    addProviderCatalogItem(createDefaultCatalogDraft())
+    items = getProviderCatalogItems()
+  }
+
+  if (!hasClusterNodeSetsCatalogItem(items)) {
+    addProviderCatalogItem(createClusterNodeSetsCatalogDraft())
+    items = getProviderCatalogItems()
+  } else {
+    const clusterItem = items.find((item) => item.catalogItemId === CLUSTER_NODE_SETS_CATALOG_ITEM_ID)
+    if (clusterItem && (!clusterItem.addonOperators || clusterItem.addonOperators.length === 0)) {
+      patchProviderCatalogItem(CLUSTER_NODE_SETS_CATALOG_ITEM_ID, {
+        addonOperatorsMode: 'locked',
+        addonOperators: [
+          { operatorId: 'nvidia-gpu-operator', mode: 'mandatory' },
+          { operatorId: 'node-feature-discovery', mode: 'mandatory' },
+        ],
+      })
+      items = getProviderCatalogItems()
+    }
+  }
+
+  if (!hasVmNetworkAttachmentsCatalogItem(items)) {
+    addProviderCatalogItem(createVmNetworkAttachmentsCatalogDraft())
+    items = getProviderCatalogItems()
+  } else {
+    const vmItem = items.find((item) => item.catalogItemId === VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID)
+    if (vmItem && (!vmItem.hardwareOsMode || !vmItem.osImageMode)) {
+      patchProviderCatalogItem(VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID, {
+        hardwareOsMode: 'locked',
+        osImageMode: 'editable',
+      })
+      items = getProviderCatalogItems()
+    }
+  }
+
+  if (!hasVmGeneralPurposeCatalogItem(items)) {
+    addProviderCatalogItem(createVmGeneralPurposeCatalogDraft())
+    items = getProviderCatalogItems()
+  } else {
+    const vmItem = items.find((item) => item.catalogItemId === VM_GENERAL_PURPOSE_CATALOG_ITEM_ID)
+    if (vmItem && (!vmItem.hardwareOsMode || !vmItem.osImageMode)) {
+      patchProviderCatalogItem(VM_GENERAL_PURPOSE_CATALOG_ITEM_ID, {
+        hardwareOsMode: 'editable',
+        osImageMode: 'editable',
+      })
+      items = getProviderCatalogItems()
+    }
+  }
+
+  if (!hasModelServingCatalogItem(items)) {
+    addProviderCatalogItem(createModelServingCatalogDraft())
+    items = getProviderCatalogItems()
+  }
+
+  const selectedServices = getProviderSelectedServices()
+  const nextServices: ProviderServiceId[] = [
+    ...new Set<ProviderServiceId>([
+      ...(selectedServices.length > 0 ? selectedServices : DEFAULT_PROVIDER_SERVICE_SELECTION),
+      'baremetal',
+      'cluster',
+      'models',
+      'virtual-machine',
+    ]),
+  ]
+  const servicesChanged =
+    nextServices.length !== selectedServices.length ||
+    nextServices.some((serviceId) => !selectedServices.includes(serviceId))
+  if (servicesChanged) {
+    setProviderSelectedServices(nextServices)
+  }
+
   return getProviderCatalogItems()
 }
 
 /**
- * Marks Provider Admin setup complete with an empty catalog and no selected services.
- * Returns the first catalog item when present; otherwise null.
+ * Seeds post-setup Provider Admin state so landing-page prototype links can open finished screens.
  */
 export function ensureProviderPostSetupPrototype(
   navId: ProviderAdminNavId = 'catalog',
 ): ProviderCatalogDraft | null {
   setProviderSetupComplete()
-  setProviderSelectedServices([])
+  setProviderSelectedServices(DEFAULT_PROVIDER_SERVICE_SELECTION)
 
   const items = ensureProviderCatalogDemoItems()
   ensureProviderDemoOrganizations()

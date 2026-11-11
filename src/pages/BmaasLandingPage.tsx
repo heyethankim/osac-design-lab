@@ -38,6 +38,7 @@ import {
   TOPIC_CATALOG_ITEM_CREATION,
   TOPIC_EXTERNAL_BILLING_ID,
   TOPIC_FULL_VS_MAX_WIDTH,
+  TOPIC_MULTI_SERVICE_CATALOG,
   TOPIC_NAVIGATION_STRUCTURE,
   TOPIC_SERVICE_ACCOUNTS,
 } from '../designHub/topics'
@@ -94,6 +95,17 @@ type TopicCard = {
 
 const LANDING_TOPICS: TopicCard[] = [
   {
+    id: TOPIC_MULTI_SERVICE_CATALOG,
+    title: 'Multi-service catalog',
+    description:
+      'Compare Tenant Admin catalog designs for offerings across bare metal, clusters, virtual machines, and models.',
+    status: 'In progress',
+    authors: 'Ethan Kim',
+    updated: BMAAS_LANDING_LAST_UPDATED,
+    personas: ['Tenant Admin'],
+    designs: designsForTopic(TOPIC_MULTI_SERVICE_CATALOG),
+  },
+  {
     id: TOPIC_EXTERNAL_BILLING_ID,
     title: 'External billing ID',
     description:
@@ -112,7 +124,7 @@ const LANDING_TOPICS: TopicCard[] = [
     id: TOPIC_SERVICE_ACCOUNTS,
     title: 'Service accounts',
     description:
-      'Compare Tenant Admin designs for non-human identities, keys, and role access.',
+      'Compare Tenant Admin designs for non-human identities, credentials, and role access.',
     status: 'In progress',
     jira: {
       key: 'OSAC-5149',

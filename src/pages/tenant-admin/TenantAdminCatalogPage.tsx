@@ -6,6 +6,9 @@ import {
   CardBody,
   Content,
   Alert,
+  Dropdown,
+  DropdownItem,
+  DropdownList,
   EmptyState,
   EmptyStateBody,
   Flex,
@@ -13,6 +16,7 @@ import {
   FormSelect,
   FormSelectOption,
   Label,
+  MenuToggle,
   Modal,
   ModalBody,
   ModalFooter,
@@ -20,6 +24,9 @@ import {
   ModalVariant,
   SearchInput,
   Spinner,
+  Tab,
+  Tabs,
+  TabTitleText,
   Title,
   Tooltip,
 } from '@patternfly/react-core'
@@ -47,10 +54,13 @@ import {
   describeCatalogServiceFilter,
 } from '../../catalog/catalogFilterSummary'
 import { getCatalogViewMode, setCatalogViewMode, type CatalogViewMode } from '../../catalog/viewMode'
+import { TOPIC_MULTI_SERVICE_CATALOG } from '../../designHub/topics'
 import {
   findCatalogItemByWorkspaceParam,
   getWorkspaceCatalogItemParam,
+  getWorkspaceTopicParam,
   syncWorkspaceCatalogItemParam,
+  WORKSPACE_DESIGN_PARAM,
 } from '../../shared/workspaceNavUrl'
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
 import { isOrganizationM360AccountInactive } from '../../billing/m360'
@@ -59,6 +69,7 @@ import { getProviderCatalogItems, getProviderSavedTemplate } from '../../provide
 import { sortByDemoCatalogOrder } from '../../providerSetup/prototypeEntry'
 import {
   CATALOG_SERVICE_FILTER_LABELS,
+  CATALOG_SERVICE_FILTERS,
   DEMO_EXISTING_MASTER_TEMPLATES,
   PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME,
   formatRateCardSummary,
@@ -112,6 +123,12 @@ function toCatalogDisplayOrderInput(item: TenantCatalogGovernanceItemWithNetwork
 }
 
 const CATALOG_ITEM_CREATE_REVEAL_MS = 1600
+
+type CatalogServiceTabId = 'all' | CatalogServiceId
+
+const ALL_CATALOG_SERVICE_IDS: readonly CatalogServiceId[] = CATALOG_SERVICE_FILTERS.map(
+  (filter) => filter.id,
+)
 
 type TenantAdminCatalogPageProps = {
   organization: RegisteredOrganization
@@ -247,6 +264,12 @@ function TenantAdminCatalogOriginLine({
   )
 }
 
+function getCatalogLaunchActionLabel(topicId: string | null): string {
+  return topicId === TOPIC_MULTI_SERVICE_CATALOG
+    ? 'Provision instance'
+    : LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel
+}
+
 function getCatalogItemActions(
   item: TenantCatalogGovernanceItemWithNetworking,
   onViewDetails: () => void,
@@ -255,6 +278,7 @@ function getCatalogItemActions(
   onDuplicate: () => void,
   onTogglePublish: () => void,
   onDelete: () => void,
+  launchActionLabel: string = LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel,
 ): IAction[] {
   const isUnpublished = item.status === 'Unpublished'
   const canMutateOrigin = isTenantScopedCatalogItem(item)
@@ -268,7 +292,7 @@ function getCatalogItemActions(
 
   if (!isUnpublished) {
     actions.push({
-      title: LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel,
+      title: launchActionLabel,
       onClick: onLaunch,
     })
   }
@@ -328,6 +352,11 @@ export function TenantAdminCatalogPage({
   onWizardFinished,
 }: TenantAdminCatalogPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
+  const topicId = getWorkspaceTopicParam(searchParams)
+  const designParam = searchParams.get(WORKSPACE_DESIGN_PARAM)?.trim()
+  const isCatalogDesign2 =
+    topicId === TOPIC_MULTI_SERVICE_CATALOG && designParam === '2'
+  const launchActionLabel = getCatalogLaunchActionLabel(topicId)
   const [catalogItems, setCatalogItems] = useState(() =>
     getTenantCatalogGovernanceItems(organization, catalogDraft),
   )
@@ -337,6 +366,7 @@ export function TenantAdminCatalogPage({
     () => new Set(initialServiceFilters.length > 0 ? initialServiceFilters : ['baremetal']),
   )
   const knownServiceFiltersRef = useRef(new Set(initialServiceFilters))
+  const [activeServiceTab, setActiveServiceTab] = useState<CatalogServiceTabId>('all')
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'Live' | 'Unpublished'>('all')
   const [searchValue, setSearchValue] = useState('')
   const [selectedCatalogItem, setSelectedCatalogItem] =
@@ -348,6 +378,10 @@ export function TenantAdminCatalogPage({
   const [isUnpublishModalOpen, setIsUnpublishModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isCreateWizardOpen, setIsCreateWizardOpen] = useState(false)
+  const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
+  const [createInitialServiceId, setCreateInitialServiceId] = useState<CatalogServiceId | null>(
+    null,
+  )
   const [creatingCatalogItemId, setCreatingCatalogItemId] = useState<string | null>(null)
   const [creatingCardHeightPx, setCreatingCardHeightPx] = useState<number | null>(null)
   const [isLaunchBillingBlockedOpen, setIsLaunchBillingBlockedOpen] = useState(false)
@@ -427,19 +461,42 @@ export function TenantAdminCatalogPage({
     refreshCatalogItems()
   }, [organization.slug])
 
+  const openCreateWizard = (serviceId?: CatalogServiceId) => {
+    setCreateInitialServiceId(serviceId ?? null)
+    setIsCreateWizardOpen(true)
+  }
+
+  const closeCreateWizard = () => {
+    setIsCreateWizardOpen(false)
+    setCreateInitialServiceId(null)
+  }
+
   const handleCreateCatalogItem = (payload: PublishedTemplatePayload) => {
     const item = createTenantCatalogItemFromPayload(payload)
     addTenantCatalogItem(organization.slug, item)
     prependToCatalogDisplayOrder(item.id)
     refreshCatalogItems()
-    setIsCreateWizardOpen(false)
+    closeCreateWizard()
     setViewMode('grid')
     setCatalogViewMode('grid')
     setSelectedStatus('all')
     setSearchValue('')
+    if (isCatalogDesign2) {
+      setActiveServiceTab('all')
+    }
     beginCatalogItemCreateReveal(item.id)
     return item
   }
+
+  const effectiveServiceFilters = useMemo(() => {
+    if (!isCatalogDesign2) {
+      return selectedFilters
+    }
+    if (activeServiceTab === 'all') {
+      return new Set<CatalogServiceId>(ALL_CATALOG_SERVICE_IDS)
+    }
+    return new Set<CatalogServiceId>([activeServiceTab])
+  }, [activeServiceTab, isCatalogDesign2, selectedFilters])
 
   useEffect(() => {
     setSelectedFilters((current) => {
@@ -466,7 +523,7 @@ export function TenantAdminCatalogPage({
     const query = searchValue.trim().toLowerCase()
 
     return orderedCatalogItems.filter((item) => {
-      if (!selectedFilters.has(item.serviceId)) {
+      if (!effectiveServiceFilters.has(item.serviceId)) {
         return false
       }
 
@@ -489,7 +546,7 @@ export function TenantAdminCatalogPage({
         )
       )
     })
-  }, [orderedCatalogItems, selectedFilters, selectedStatus, searchValue])
+  }, [orderedCatalogItems, effectiveServiceFilters, selectedStatus, searchValue])
 
   useLayoutEffect(() => {
     if (!creatingCatalogItemId || viewMode !== 'grid') {
@@ -521,9 +578,14 @@ export function TenantAdminCatalogPage({
 
   const filterDescriptionParts = useMemo(() => {
     const parts: string[] = []
-    const serviceDescription = describeCatalogServiceFilter(selectedFilters, catalogServiceIds)
-    if (serviceDescription) {
-      parts.push(`service: ${serviceDescription}`)
+    if (!isCatalogDesign2 || activeServiceTab !== 'all') {
+      const serviceDescription = describeCatalogServiceFilter(
+        effectiveServiceFilters,
+        catalogServiceIds,
+      )
+      if (serviceDescription) {
+        parts.push(`service: ${serviceDescription}`)
+      }
     }
     if (selectedStatus !== 'all') {
       parts.push(
@@ -534,17 +596,28 @@ export function TenantAdminCatalogPage({
       parts.push(`search: "${searchValue.trim()}"`)
     }
     return parts
-  }, [catalogServiceIds, searchValue, selectedFilters, selectedStatus])
+  }, [
+    activeServiceTab,
+    catalogServiceIds,
+    effectiveServiceFilters,
+    isCatalogDesign2,
+    searchValue,
+    selectedStatus,
+  ])
 
   const clearAllFilters = () => {
     setSearchValue('')
     setSelectedStatus('all')
-    setSelectedFilters(createCatalogServiceFilterSet(catalogServiceIds))
+    if (isCatalogDesign2) {
+      setActiveServiceTab('all')
+    } else {
+      setSelectedFilters(createCatalogServiceFilterSet(catalogServiceIds))
+    }
   }
 
   const hasAnyItems = orderedCatalogItems.length > 0
   const singleSelectedServiceId =
-    selectedFilters.size === 1 ? [...selectedFilters][0]! : null
+    effectiveServiceFilters.size === 1 ? [...effectiveServiceFilters][0]! : null
   const isSingleServiceTrueEmpty =
     hasAnyItems &&
     filteredItems.length === 0 &&
@@ -556,7 +629,7 @@ export function TenantAdminCatalogPage({
     if (!hasAnyItems) {
       return 'No catalog items yet'
     }
-    if (selectedFilters.size === 0) {
+    if (effectiveServiceFilters.size === 0) {
       return 'Select a service to view catalog items'
     }
     if (searchValue.trim()) {
@@ -575,8 +648,10 @@ export function TenantAdminCatalogPage({
     if (!hasAnyItems) {
       return 'Create a catalog item to publish offerings for this organization.'
     }
-    if (selectedFilters.size === 0) {
-      return 'Choose one or more services above to filter the catalog.'
+    if (effectiveServiceFilters.size === 0) {
+      return isCatalogDesign2
+        ? 'Choose a service tab above to filter the catalog.'
+        : 'Choose one or more services above to filter the catalog.'
     }
     if (searchValue.trim()) {
       return 'Try a different search term or clear the search field.'
@@ -866,6 +941,7 @@ export function TenantAdminCatalogPage({
       () => handleDuplicate(item),
       () => openTogglePublish(item),
       () => openDelete(item),
+      launchActionLabel,
     )
 
   const detailsItem = selectedCatalogItem
@@ -896,7 +972,8 @@ export function TenantAdminCatalogPage({
           templates={catalogTemplates}
           organizations={[organization]}
           defaultTemplateRefId={catalogTemplates[0]?.templateRefId}
-          onClose={() => setIsCreateWizardOpen(false)}
+          initialServiceId={createInitialServiceId}
+          onClose={closeCreateWizard}
           onCreateCatalogItem={handleCreateCatalogItem}
         />
       ) : isEditWizardOpen && editingCatalogDraft ? (
@@ -955,6 +1032,7 @@ export function TenantAdminCatalogPage({
           onBack={closeDetails}
           onNavigateToProjectsTeams={onNavigateToProjectsTeams}
           onLaunch={() => openLaunchWizard(detailsItem)}
+          launchActionLabel={launchActionLabel}
           onEdit={() => openEdit(detailsItem, { returnToDetails: true })}
           onDuplicate={() => handleDuplicate(detailsItem)}
           onTogglePublish={() => openTogglePublish(detailsItem)}
@@ -977,14 +1055,48 @@ export function TenantAdminCatalogPage({
             </Content>
           </FlexItem>
           <FlexItem alignSelf={{ default: 'alignSelfFlexStart' }}>
-            <Button
-              variant="primary"
-              icon={<PlusIcon />}
-              className="tenant-admin-catalog-manager__create"
-              onClick={() => setIsCreateWizardOpen(true)}
-            >
-              Create catalog item
-            </Button>
+            {isCatalogDesign2 ? (
+              <Dropdown
+                isOpen={isCreateMenuOpen}
+                onOpenChange={(isOpen) => setIsCreateMenuOpen(isOpen)}
+                onSelect={() => setIsCreateMenuOpen(false)}
+                popperProps={{ position: 'right' }}
+                toggle={(toggleRef) => (
+                  <MenuToggle
+                    ref={toggleRef}
+                    variant="primary"
+                    icon={<PlusIcon />}
+                    isExpanded={isCreateMenuOpen}
+                    onClick={() => setIsCreateMenuOpen((open) => !open)}
+                    className="tenant-admin-catalog-manager__create"
+                    aria-label="Create catalog item"
+                  >
+                    Create catalog item
+                  </MenuToggle>
+                )}
+              >
+                <DropdownList>
+                  {CATALOG_SERVICE_FILTERS.map((service) => (
+                    <DropdownItem
+                      key={service.id}
+                      value={service.id}
+                      onClick={() => openCreateWizard(service.id)}
+                    >
+                      {service.label}
+                    </DropdownItem>
+                  ))}
+                </DropdownList>
+              </Dropdown>
+            ) : (
+              <Button
+                variant="primary"
+                icon={<PlusIcon />}
+                className="tenant-admin-catalog-manager__create"
+                onClick={() => openCreateWizard()}
+              >
+                Create catalog item
+              </Button>
+            )}
           </FlexItem>
         </Flex>
 
@@ -1002,14 +1114,56 @@ export function TenantAdminCatalogPage({
           </Alert>
         ) : null}
 
+        {isCatalogDesign2 ? (
+          <Tabs
+            activeKey={activeServiceTab}
+            onSelect={(_event, eventKey) => {
+              setActiveServiceTab(String(eventKey) as CatalogServiceTabId)
+            }}
+            aria-label="Catalog services"
+            className="tenant-admin-catalog-manager__service-tabs"
+          >
+            {[
+              <Tab
+                key="all"
+                eventKey="all"
+                title={
+                  <TabTitleText>
+                    All
+                    <span className="tenant-admin-catalog-manager__tab-count">
+                      {orderedCatalogItems.length}
+                    </span>
+                  </TabTitleText>
+                }
+              />,
+              ...CATALOG_SERVICE_FILTERS.map((service) => (
+                <Tab
+                  key={service.id}
+                  eventKey={service.id}
+                  title={
+                    <TabTitleText>
+                      {service.label}
+                      <span className="tenant-admin-catalog-manager__tab-count">
+                        {serviceCounts[service.id]}
+                      </span>
+                    </TabTitleText>
+                  }
+                />
+              )),
+            ]}
+          </Tabs>
+        ) : null}
+
         {hasAnyItems ? (
           <div className="catalog-view-toolbar tenant-admin-catalog-manager__toolbar">
             <div className="catalog-view-toolbar__start">
-              <CatalogServiceFilterToggle
-                selectedFilters={selectedFilters}
-                serviceCounts={serviceCounts}
-                onToggle={handleFilterToggle}
-              />
+              {!isCatalogDesign2 ? (
+                <CatalogServiceFilterToggle
+                  selectedFilters={selectedFilters}
+                  serviceCounts={serviceCounts}
+                  onToggle={handleFilterToggle}
+                />
+              ) : null}
               <FormSelect
                 className="catalog-status-filter"
                 id="tenant-admin-catalog-status-filter"
@@ -1163,7 +1317,7 @@ export function TenantAdminCatalogPage({
                         onClick={() => openLaunchWizard(item)}
                         className="tenant-admin-catalog-manager__launch-button"
                       >
-                        {LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel}
+                        {launchActionLabel}
                       </Button>
                     ) : null}
                   </CardBody>

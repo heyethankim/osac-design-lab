@@ -24,11 +24,11 @@ body {
   min-width: 7rem;
   height: auto;
   min-height: 2rem;
-  max-height: 2.75rem !important;
+  max-height: 3.75rem !important;
 }
 
 .pf-v6-c-masthead__brand > .pf-v6-c-masthead__logo[class*='-masthead-logo'] > * {
-  max-height: 2.75rem !important;
+  max-height: 3.75rem !important;
 }
 
 .pf-v6-c-masthead .northsummit-masthead-brand,

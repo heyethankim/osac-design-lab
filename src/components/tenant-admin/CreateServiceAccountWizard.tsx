@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowRightIcon } from '@patternfly/react-icons/dist/esm/icons/arrow-right-icon'
 import { RhUiRobotIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-robot-icon'
 import {
+  Alert,
+  Content,
   DescriptionList,
   DescriptionListDescription,
   DescriptionListGroup,
@@ -14,15 +16,17 @@ import {
   HelperText,
   HelperTextItem,
   TextArea,
-  TextInput,
 } from '@patternfly/react-core'
+import { KubernetesResourceNameField } from '../shared/KubernetesResourceNameHelper'
 import {
   buildDemoCreateServiceAccountForm,
+  buildServiceAccountClientId,
   createTenantServiceAccount,
   isServiceAccountNameTaken,
   TENANT_SERVICE_ACCOUNTS_DEMO,
   updateTenantServiceAccount,
   validateServiceAccountName,
+  type ServiceAccountsDesignVariant,
   type TenantServiceAccount,
 } from '../../tenantAdmin/serviceAccounts'
 import { DEMO_TENANT_ROOT_PROJECT_ID } from '../../tenantAdmin/projects'
@@ -32,7 +36,6 @@ import {
   type NetworkInventoryCreateBreadcrumbAncestor,
 } from '../networking/NetworkInventoryCreateWizardShell'
 import { NETWORK_INVENTORY_CREATE_REVIEW_STEP } from '../../networking/networkInventoryCreateWizard'
-import { KUBERNETES_RESOURCE_NAME_MAX_LENGTH } from '../../shared/kubernetesResourceName'
 import { useWorkspaceWizardStepUrl } from '../../shared/useWorkspaceWizardStepUrl'
 
 type CreateServiceAccountForm = {
@@ -41,8 +44,13 @@ type CreateServiceAccountForm = {
   projectId: string | null
 }
 
-const CREATE_SERVICE_ACCOUNT_STEPS = [
+const CREATE_SERVICE_ACCOUNT_STEPS_DESIGN1 = [
   { id: 'details', label: 'Details' },
+  NETWORK_INVENTORY_CREATE_REVIEW_STEP,
+] as const
+
+const CREATE_SERVICE_ACCOUNT_STEPS_DESIGN2 = [
+  { id: 'general', label: 'General' },
   NETWORK_INVENTORY_CREATE_REVIEW_STEP,
 ] as const
 
@@ -56,6 +64,7 @@ type CreateServiceAccountWizardProps = {
   onSaved?: (account: TenantServiceAccount) => void
   breadcrumbAncestors?: readonly NetworkInventoryCreateBreadcrumbAncestor[]
   parentLabel?: string
+  designVariant?: ServiceAccountsDesignVariant
 }
 
 function formFromAccount(account: TenantServiceAccount): CreateServiceAccountForm {
@@ -84,8 +93,11 @@ export function CreateServiceAccountWizard({
   onSaved,
   breadcrumbAncestors,
   parentLabel,
+  designVariant = '1',
 }: CreateServiceAccountWizardProps) {
+  const isDesign2 = designVariant === '2'
   const isEditMode = mode === 'edit' && editingAccount !== null
+  const steps = isDesign2 ? CREATE_SERVICE_ACCOUNT_STEPS_DESIGN2 : CREATE_SERVICE_ACCOUNT_STEPS_DESIGN1
   const projects = useMemo(() => getTenantProjects(tenantSlug), [tenantSlug])
   const defaultProjectId =
     projects.find((project) => project.id === DEMO_TENANT_ROOT_PROJECT_ID)?.id ??
@@ -107,6 +119,7 @@ export function CreateServiceAccountWizard({
     Boolean(form.name.trim()) &&
     Boolean(form.projectId) &&
     !nameError &&
+    !isEditMode &&
     isServiceAccountNameTaken(tenantSlug, form.name, form.projectId!, excludeId)
   const isDetailsStepValid =
     Boolean(form.name.trim()) &&
@@ -116,11 +129,12 @@ export function CreateServiceAccountWizard({
     Boolean(selectedProject)
   const hasEditChanges = Boolean(editBaseline && !formsEqual(form, editBaseline))
   const canSubmit = isEditMode ? isDetailsStepValid && hasEditChanges : isDetailsStepValid
+  const clientIdPreview = buildServiceAccountClientId(tenantSlug, form.name || 'name')
 
   const { startIndex: wizardStartIndex, onStepChange } = useWorkspaceWizardStepUrl(
     true,
     isOpen,
-    CREATE_SERVICE_ACCOUNT_STEPS,
+    steps,
   )
 
   useEffect(() => {
@@ -155,9 +169,10 @@ export function CreateServiceAccountWizard({
 
     const created = createTenantServiceAccount(tenantSlug, {
       name: form.name,
-      description: form.description,
+      description: isDesign2 ? '' : form.description,
       projectId: selectedProject.id,
       projectName: selectedProject.name,
+      issueCredential: isDesign2,
     })
     if (!created) {
       return
@@ -168,7 +183,7 @@ export function CreateServiceAccountWizard({
   }
 
   const handleSave = () => {
-    if (!isEditMode || !editingAccount || !selectedProject || !canSubmit) {
+    if (!isEditMode || !editingAccount || !selectedProject || !canSubmit || isDesign2) {
       return
     }
 
@@ -187,72 +202,103 @@ export function CreateServiceAccountWizard({
   }
 
   function renderStepContent(stepId: string) {
-    if (stepId === 'details') {
+    if (stepId === 'details' || stepId === 'general') {
       return (
         <div className="tenant-admin-service-accounts__wizard-step">
           <Form autoComplete="off" className="tenant-admin-service-accounts__wizard-form">
+            {isDesign2 ? (
+              <Alert
+                variant="info"
+                isInline
+                title="No permissions on create"
+                className="tenant-admin-service-accounts__create-permissions-alert"
+              >
+                {TENANT_SERVICE_ACCOUNTS_DEMO.noPermissionsOnCreateHelp}
+              </Alert>
+            ) : null}
             <FormGroup label="Name" fieldId="create-service-account-name" isRequired>
-              <TextInput
+              <KubernetesResourceNameField
                 id="create-service-account-name"
                 value={form.name}
-                validated={nameError || nameTaken ? 'error' : 'default'}
-                onChange={(_event, value) => setForm((current) => ({ ...current, name: value }))}
+                onChange={(value) => setForm((current) => ({ ...current, name: value }))}
                 placeholder="e.g. jenkins-deployer"
-                maxLength={KUBERNETES_RESOURCE_NAME_MAX_LENGTH}
+                aria-label="Service account name"
+                isRequired
               />
-              <FormHelperText>
-                <HelperText>
-                  <HelperTextItem variant={nameError || nameTaken ? 'error' : 'default'}>
-                    {nameTaken
-                      ? 'Name already used in this project.'
-                      : nameError
-                        ? nameError
-                        : 'Lowercase letters, numbers, and hyphens.'}
-                  </HelperTextItem>
-                </HelperText>
-              </FormHelperText>
+              {nameTaken ? (
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem variant="error">
+                      {isDesign2
+                        ? 'Name already used in this tenant.'
+                        : 'Name already used in this project.'}
+                    </HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
+              ) : null}
             </FormGroup>
-            <FormGroup label="Project" fieldId="create-service-account-project" isRequired>
-              <FormSelect
-                id="create-service-account-project"
-                value={form.projectId ?? ''}
-                onChange={(_event, value) => {
-                  const nextProjectId = value || null
-                  setForm((current) => {
-                    if (
-                      !isEditMode &&
-                      nextProjectId &&
-                      isServiceAccountNameTaken(tenantSlug, current.name, nextProjectId)
-                    ) {
-                      return buildDemoCreateServiceAccountForm(tenantSlug, nextProjectId)
-                    }
-                    return { ...current, projectId: nextProjectId }
-                  })
-                }}
-                aria-label="Project"
-              >
-                <FormSelectOption value="" label="Select a project" isDisabled />
-                {projects.map((project) => (
-                  <FormSelectOption
-                    key={project.id}
-                    value={project.id}
-                    label={project.name}
-                  />
-                ))}
-              </FormSelect>
-            </FormGroup>
-            <FormGroup label="Description" fieldId="create-service-account-description">
-              <TextArea
-                id="create-service-account-description"
-                value={form.description}
-                onChange={(_event, value) =>
-                  setForm((current) => ({ ...current, description: value }))
-                }
-                placeholder="Optional"
-                rows={3}
-                resizeOrientation="vertical"
-              />
-            </FormGroup>
+            {isDesign2 ? (
+              <FormGroup label="Client ID preview" fieldId="create-service-account-client-id">
+                <Content
+                  component="p"
+                  className="tenant-admin-service-accounts__client-id-preview"
+                  id="create-service-account-client-id"
+                >
+                  <code>{clientIdPreview}</code>
+                </Content>
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>
+                      Generated as <code>sa-&lt;tenant-id&gt;-&lt;name&gt;</code>.
+                    </HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
+              </FormGroup>
+            ) : (
+              <FormGroup label="Project" fieldId="create-service-account-project" isRequired>
+                <FormSelect
+                  id="create-service-account-project"
+                  value={form.projectId ?? ''}
+                  onChange={(_event, value) => {
+                    const nextProjectId = value || null
+                    setForm((current) => {
+                      if (
+                        !isEditMode &&
+                        nextProjectId &&
+                        isServiceAccountNameTaken(tenantSlug, current.name, nextProjectId)
+                      ) {
+                        return buildDemoCreateServiceAccountForm(tenantSlug, nextProjectId)
+                      }
+                      return { ...current, projectId: nextProjectId }
+                    })
+                  }}
+                  aria-label="Project"
+                >
+                  <FormSelectOption value="" label="Select a project" isDisabled />
+                  {projects.map((project) => (
+                    <FormSelectOption
+                      key={project.id}
+                      value={project.id}
+                      label={project.name}
+                    />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+            )}
+            {!isDesign2 ? (
+              <FormGroup label="Description" fieldId="create-service-account-description">
+                <TextArea
+                  id="create-service-account-description"
+                  value={form.description}
+                  onChange={(_event, value) =>
+                    setForm((current) => ({ ...current, description: value }))
+                  }
+                  placeholder="Optional"
+                  rows={3}
+                  resizeOrientation="vertical"
+                />
+              </FormGroup>
+            ) : null}
           </Form>
         </div>
       )
@@ -266,24 +312,40 @@ export function CreateServiceAccountWizard({
             <code>{form.name.trim().toLowerCase() || '—'}</code>
           </DescriptionListDescription>
         </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>Project</DescriptionListTerm>
-          <DescriptionListDescription>
-            {selectedProject?.name ?? '—'}
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>Description</DescriptionListTerm>
-          <DescriptionListDescription>
-            {form.description.trim() || '—'}
-          </DescriptionListDescription>
-        </DescriptionListGroup>
+        {isDesign2 ? (
+          <DescriptionListGroup>
+            <DescriptionListTerm>Client ID</DescriptionListTerm>
+            <DescriptionListDescription>
+              <code>{clientIdPreview}</code>
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+        ) : (
+          <DescriptionListGroup>
+            <DescriptionListTerm>Project</DescriptionListTerm>
+            <DescriptionListDescription>
+              {selectedProject?.name ?? '—'}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+        )}
+        {!isDesign2 ? (
+          <DescriptionListGroup>
+            <DescriptionListTerm>Description</DescriptionListTerm>
+            <DescriptionListDescription>
+              {form.description.trim() || '—'}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+        ) : (
+          <DescriptionListGroup>
+            <DescriptionListTerm>Permissions</DescriptionListTerm>
+            <DescriptionListDescription>None (assign after creation)</DescriptionListDescription>
+          </DescriptionListGroup>
+        )}
       </DescriptionList>
     )
   }
 
   function getStepFooter(stepId: string) {
-    if (stepId === 'details') {
+    if (stepId === 'details' || stepId === 'general') {
       return { isNextDisabled: !isDetailsStepValid }
     }
 
@@ -315,9 +377,13 @@ export function CreateServiceAccountWizard({
       title={isEditMode ? 'Edit service account' : TENANT_SERVICE_ACCOUNTS_DEMO.createLabel}
       titleId="create-service-account-wizard-title"
       description={
-        isEditMode ? 'Update this account for a project.' : 'Add an account for a project.'
+        isEditMode
+          ? 'Update this account for a project.'
+          : isDesign2
+            ? 'Add a non-human account for this tenant.'
+            : 'Add an account for a project.'
       }
-      steps={CREATE_SERVICE_ACCOUNT_STEPS}
+      steps={steps}
       renderStepContent={renderStepContent}
       getStepFooter={getStepFooter}
       onClose={handleClose}

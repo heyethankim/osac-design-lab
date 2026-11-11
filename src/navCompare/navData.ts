@@ -33,7 +33,7 @@ export type PersonaNavConfig = {
 export const providerAdminNav: PersonaNavConfig = {
   id: 'provider-admin',
   label: 'Provider Admin',
-  activeItem: 'tenants',
+  activeItem: 'catalog',
   defaultExpanded: ['administration', 'compute', 'storage', 'networking'],
   nav: [
     {
@@ -223,7 +223,7 @@ export const tenantAdminNav: PersonaNavConfig = {
       children: [
         {
           id: 'roles',
-          label: 'Roles',
+          label: 'Users',
           description: 'Decide who can do what — bind people to roles across the tenant.',
         },
         {

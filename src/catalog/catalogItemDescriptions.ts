@@ -5,6 +5,8 @@ export const DEMO_CATALOG_ITEM_IDS = {
   bareMetalDenseGpu: 'cat-bm-dense-gpu',
   clusterNodeSets: 'cat-node-sets-fc430',
   vmNetworkAttachments: 'cat-vm-net-attach',
+  vmGeneralPurpose: 'cat-vm-general-purpose',
+  modelServing: 'cat-model-serving',
 } as const
 
 /** User-facing guidance shown on catalog detail pages and demo catalog seeds. */
@@ -17,6 +19,10 @@ export const CATALOG_ITEM_DESCRIPTIONS_BY_ID: Readonly<Record<string, string>> =
     'Use this offering to launch an OpenShift cluster.',
   [DEMO_CATALOG_ITEM_IDS.vmNetworkAttachments]:
     'Use this virtual machine for apps, testing, or development. You can adjust networking when you launch.',
+  [DEMO_CATALOG_ITEM_IDS.vmGeneralPurpose]:
+    'Use this general-purpose virtual machine for apps, testing, or development.',
+  [DEMO_CATALOG_ITEM_IDS.modelServing]:
+    'Use this model endpoint when you need managed AI inference.',
 }
 
 export const CATALOG_ITEM_DESCRIPTIONS_BY_SERVICE: Readonly<Record<CatalogServiceId, string>> = {

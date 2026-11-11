@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { syncWorkspaceCatalogItemParam, syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
 import { useWorkspaceWizardWidth } from '../shared/useWorkspaceWizardWidth'
 import { TenantShell } from '../components/tenant/TenantShell'
 import { DEMO_TENANT_DISPLAY_ADMIN, isDemoTenantId } from '../demoTenant'
+import { TOPIC_SERVICE_ACCOUNTS } from '../designHub/topics'
 import { PlaceholderTenantAdminPage } from './PlaceholderTenantAdminPage'
 import { ProviderAdminExternalNetworksPage } from './infrastructure/ProviderAdminExternalNetworksPage'
 import { ProviderAdminVirtualNetworksPage } from './infrastructure/ProviderAdminVirtualNetworksPage'
@@ -19,6 +20,7 @@ import {
   TENANT_ADMIN_NAV_ITEMS,
   isServicesNavId,
   type TenantAdminNavId,
+  type TenantAdminNavItem,
 } from '../tenantAdmin/constants'
 import { getWorkspaceOrganization } from '../tenantAdmin/organizations'
 import { resolveOrganizationCompanyLogo } from '../providerAdmin/organizations'
@@ -61,7 +63,18 @@ import { LAUNCH_INSTANCE_PROVISIONING_DURATION_MS, LAUNCH_INSTANCE_SERVICES_PROV
 
 const TENANT_ADMIN_PLACEHOLDER_PAGES: Partial<
   Record<TenantAdminNavId, { title: string; description: string }>
-> = {}
+> = {
+  'storage-volumes': {
+    title: 'Volumes',
+    description:
+      'Create and manage the disks attached to your workloads. Read-only for the design preview.',
+  },
+  'administration-identity-providers': {
+    title: 'Identity provider',
+    description:
+      'Plug in how people sign in — connect your IdP so the right folks get access.',
+  },
+}
 
 function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
   return (
@@ -72,9 +85,11 @@ function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
     value === 'services-models' ||
     value === 'services-virtual-machines' ||
     value === 'projects-teams' ||
+    value === 'storage-volumes' ||
     value === 'administration-roles' ||
     value === 'administration-service-accounts' ||
     value === 'administration-billing' ||
+    value === 'administration-identity-providers' ||
     value === 'networking-virtual-networks' ||
     value === 'networking-external-ip-pools' ||
     value === 'secrets'
@@ -230,6 +245,25 @@ export function TenantAdminWorkspacePage() {
   const catalogDraft = getProviderCatalogDraft()
   const displayName = organization.tenantAdminName ?? DEMO_TENANT_DISPLAY_ADMIN.northsummit
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
+  const isServiceAccountsDesign2 =
+    searchParams.get('topic')?.trim() === TOPIC_SERVICE_ACCOUNTS &&
+    searchParams.get('design')?.trim() === '2'
+  const navItems = useMemo((): TenantAdminNavItem[] => {
+    if (!isServiceAccountsDesign2) {
+      return [...TENANT_ADMIN_NAV_ITEMS]
+    }
+    return TENANT_ADMIN_NAV_ITEMS.map((item) => {
+      if (item.id !== 'administration' || !item.children?.length) {
+        return item
+      }
+      return {
+        ...item,
+        children: item.children.map((child) =>
+          child.id === 'administration-roles' ? { ...child, label: 'Users' } : child,
+        ),
+      }
+    })
+  }, [isServiceAccountsDesign2])
 
   const handleProjectScopeChange = (scopeId: ProjectScopeId) => {
     setProjectScopeIdState(scopeId)
@@ -391,6 +425,12 @@ export function TenantAdminWorkspacePage() {
           <TenantAdminAdministratorsPage
             organization={organization}
             onOrganizationChange={setOrganization}
+            title={isServiceAccountsDesign2 ? 'Users' : undefined}
+            lede={
+              isServiceAccountsDesign2
+                ? 'Manage human users and their tenant access for your organization.'
+                : undefined
+            }
           />
         )
       case 'administration-service-accounts':
@@ -437,7 +477,7 @@ export function TenantAdminWorkspacePage() {
     <TenantShell
       role="tenant-admin"
       displayName={displayName}
-      navItems={TENANT_ADMIN_NAV_ITEMS}
+      navItems={navItems}
       showNavigation
       activeNavId={activeNavId}
       onNavChange={handleNavChange}

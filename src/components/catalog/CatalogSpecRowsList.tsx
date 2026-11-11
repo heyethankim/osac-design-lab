@@ -18,6 +18,7 @@ const TOP_LEVEL_SPEC_LABELS = new Set([
   'Instance type',
   'Size',
   CLUSTER_NODE_SETS_PARENT_LABEL,
+  'Add-on operators',
   'Tenant access to node topology',
   'Network attachments',
   'Boot disk',
@@ -137,10 +138,25 @@ function renderSpecRowValue(row: CatalogSpecRow): ReactNode {
     return <CatalogDiskImageValue badge={row.badge}>{row.value}</CatalogDiskImageValue>
   }
   if (isNodeSetsParentLabel(row.label) && row.badge) {
+    // Summary cards: "3 pools · 10 nodes" + Editable/Locked.
+    // Expanded parent (children list pools): badge-only value.
+    const summaryValue = row.value.trim()
+    const isModeOnlyValue =
+      !summaryValue || summaryValue === row.badge.text || summaryValue === 'Locked' || summaryValue === 'Editable'
+    if (isModeOnlyValue) {
+      return (
+        <Label color={row.badge.color} isCompact>
+          {row.badge.text}
+        </Label>
+      )
+    }
     return (
-      <Label color={row.badge.color} isCompact>
-        {row.badge.text}
-      </Label>
+      <span className="catalog-spec-row-value-with-badge">
+        <span>{row.value}</span>
+        <Label color={row.badge.color} isCompact>
+          {row.badge.text}
+        </Label>
+      </span>
     )
   }
   if (row.badge) {

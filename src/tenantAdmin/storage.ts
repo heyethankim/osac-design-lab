@@ -1,6 +1,10 @@
 import type { TenantAdminNavId } from './constants'
 import { getTenantAdminLeafNavItems } from './constants'
-import type { TenantCatalogItem } from './catalogItems'
+import {
+  createDemoTenantCatalogGeneralPurposeItem,
+  DEMO_TENANT_CATALOG_GENERAL_PURPOSE_ID,
+  type TenantCatalogItem,
+} from './catalogItems'
 import type { OrganizationExternalIpPool, TenantProject } from './projects'
 import {
   DEMO_FRAUD_DETECTION_PROJECT_DESCRIPTION,
@@ -952,16 +956,37 @@ export function getTenantCatalogItems(slug: string): TenantCatalogItem[] {
   }
 }
 
-/** Clears tenant catalog items for the empty-state prototype (does not seed demos). */
+/** Seeds the tenant-created general-purpose bare metal catalog item when missing. */
 export function ensureTenantDemoCatalogItems(slug: string): TenantCatalogItem[] {
   const existing = getTenantCatalogItems(slug)
-  if (existing.length === 0) {
-    return []
+  const demoIndex = existing.findIndex((item) => item.id === DEMO_TENANT_CATALOG_GENERAL_PURPOSE_ID)
+
+  if (demoIndex === -1) {
+    const seeded = [createDemoTenantCatalogGeneralPurposeItem(), ...existing]
+    setTenantCatalogItems(slug, seeded)
+    return seeded
   }
 
-  // Drop any previously seeded demo / session items so catalogs stay empty.
-  setTenantCatalogItems(slug, [])
-  return []
+  const current = existing[demoIndex]!
+  const desired = createDemoTenantCatalogGeneralPurposeItem()
+  const needsSync =
+    current.displayName !== desired.displayName ||
+    current.status !== desired.status ||
+    !current.catalogConfig ||
+    current.catalogConfig.instanceTypeId !== desired.catalogConfig?.instanceTypeId ||
+    current.catalogConfig.diskImageId !== desired.catalogConfig?.diskImageId ||
+    current.catalogConfig.hardwareOsMode !== desired.catalogConfig?.hardwareOsMode ||
+    current.catalogConfig.osImageMode !== desired.catalogConfig?.osImageMode
+
+  if (!needsSync) {
+    return existing
+  }
+
+  const updated = existing.map((item) =>
+    item.id === DEMO_TENANT_CATALOG_GENERAL_PURPOSE_ID ? desired : item,
+  )
+  setTenantCatalogItems(slug, updated)
+  return updated
 }
 
 export function setTenantCatalogItems(slug: string, items: TenantCatalogItem[]): void {

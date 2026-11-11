@@ -12,13 +12,12 @@ import {
   ModalHeader,
   ModalVariant,
 } from '@patternfly/react-core'
+import { type AssignableTenantRoleId } from '../../tenantAdmin/administrators'
 import {
-  ASSIGNABLE_TENANT_ROLES,
-  getAssignableTenantRole,
-  type AssignableTenantRoleId,
-} from '../../tenantAdmin/administrators'
-import {
+  getServiceAccountAssignableRole,
+  SERVICE_ACCOUNT_ASSIGNABLE_ROLES,
   TENANT_SERVICE_ACCOUNTS_DEMO,
+  type ServiceAccountAssignableRoleId,
   type TenantServiceAccount,
 } from '../../tenantAdmin/serviceAccounts'
 
@@ -38,10 +37,10 @@ export function BindServiceAccountRoleModal({
     [account],
   )
   const availableRoles = useMemo(
-    () => ASSIGNABLE_TENANT_ROLES.filter((role) => !boundRoleIds.has(role.id)),
+    () => SERVICE_ACCOUNT_ASSIGNABLE_ROLES.filter((role) => !boundRoleIds.has(role.id)),
     [boundRoleIds],
   )
-  const [roleId, setRoleId] = useState<AssignableTenantRoleId | ''>('')
+  const [roleId, setRoleId] = useState<ServiceAccountAssignableRoleId | ''>('')
 
   useEffect(() => {
     if (!account) {
@@ -51,7 +50,7 @@ export function BindServiceAccountRoleModal({
     setRoleId(availableRoles[0]?.id ?? '')
   }, [account, availableRoles])
 
-  const selectedRole = roleId ? getAssignableTenantRole(roleId) : null
+  const selectedRole = roleId ? getServiceAccountAssignableRole(roleId) : null
   const canBind = Boolean(account && roleId)
 
   return (
@@ -77,7 +76,9 @@ export function BindServiceAccountRoleModal({
               <FormSelect
                 id="bind-service-account-role"
                 value={roleId}
-                onChange={(_event, value) => setRoleId(value as AssignableTenantRoleId)}
+                onChange={(_event, value) =>
+                  setRoleId(value as ServiceAccountAssignableRoleId)
+                }
                 aria-label="Role"
               >
                 {availableRoles.map((role) => (

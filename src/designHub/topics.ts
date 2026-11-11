@@ -2,6 +2,7 @@ import {
   buildNavigationStructurePath,
   buildProviderCreateCatalogItemPath,
   buildProviderOrganizationsPath,
+  buildTenantAdminCatalogPath,
   buildTenantAdminServiceAccountsPath,
   NAVIGATION_STRUCTURE_TOPIC_ID,
   WORKSPACE_ACTION_REGISTER_TENANT,
@@ -18,6 +19,7 @@ export const TOPIC_FULL_VS_MAX_WIDTH = 'full-vs-max-width'
 export const TOPIC_NAVIGATION_STRUCTURE = NAVIGATION_STRUCTURE_TOPIC_ID
 export const TOPIC_SERVICE_ACCOUNTS = 'service-accounts'
 export const TOPIC_EXTERNAL_BILLING_ID = 'external-billing-id'
+export const TOPIC_MULTI_SERVICE_CATALOG = 'multi-service-catalog'
 
 export type DesignHubOption = {
   key: string
@@ -37,6 +39,20 @@ function widthParamIs(searchParams: URLSearchParams, value: string): boolean {
 
 /** Design options available in the hub banner for a topic (when opened with hub=1). */
 export const DESIGN_HUB_TOPIC_OPTIONS: Record<string, readonly DesignHubOption[]> = {
+  [TOPIC_MULTI_SERVICE_CATALOG]: [
+    {
+      key: '1',
+      label: 'Design 1',
+      to: buildTenantAdminCatalogPath({ topic: TOPIC_MULTI_SERVICE_CATALOG, design: '1' }),
+      isCurrent: (_p, s) => designParamIs(s, '1') || !s.get(WORKSPACE_DESIGN_PARAM),
+    },
+    {
+      key: '2',
+      label: 'Design 2',
+      to: buildTenantAdminCatalogPath({ topic: TOPIC_MULTI_SERVICE_CATALOG, design: '2' }),
+      isCurrent: (_p, s) => designParamIs(s, '2'),
+    },
+  ],
   [TOPIC_EXTERNAL_BILLING_ID]: [
     {
       key: '1',
@@ -62,9 +78,15 @@ export const DESIGN_HUB_TOPIC_OPTIONS: Record<string, readonly DesignHubOption[]
   [TOPIC_SERVICE_ACCOUNTS]: [
     {
       key: '1',
-      label: 'Design',
+      label: 'Design 1',
       to: buildTenantAdminServiceAccountsPath({ topic: TOPIC_SERVICE_ACCOUNTS, design: '1' }),
       isCurrent: (_p, s) => designParamIs(s, '1') || !s.get(WORKSPACE_DESIGN_PARAM),
+    },
+    {
+      key: '2',
+      label: 'Design 2',
+      to: buildTenantAdminServiceAccountsPath({ topic: TOPIC_SERVICE_ACCOUNTS, design: '2' }),
+      isCurrent: (_p, s) => designParamIs(s, '2'),
     },
   ],
   [TOPIC_NAVIGATION_STRUCTURE]: [

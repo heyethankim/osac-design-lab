@@ -273,31 +273,37 @@ export function TenantShell({
   const sidebar = (
     <PageSidebar>
       <PageSidebarBody isFilled>
-        <Nav
-          className="osac-app-shell-nav"
-          aria-label="Primary"
-          onSelect={(_event, item) => {
-            const nextNavId = String(item.itemId)
-            if (disabledNavIds.includes(nextNavId)) {
-              return
-            }
-            if (onNavChange) {
-              onNavChange(nextNavId)
-            } else {
-              setInternalActiveNavId(nextNavId)
-            }
-          }}
-        >
-          {navGroups.length > 0 ? (
-            navGroups.map((group) => (
-              <NavGroup key={group.id} title={group.label}>
-                {group.items.map((item) => renderNavItem(item))}
-              </NavGroup>
-            ))
-          ) : (
-            <NavList>{navItems.map((item) => renderNavItem(item))}</NavList>
-          )}
-        </Nav>
+        <div className="osac-shell-sidebar-inner">
+          <div className="osac-shell-sidebar-product">
+            <p className="osac-shell-sidebar-product__title">Cloud Extensions</p>
+            <Divider className="osac-shell-sidebar-product__divider" />
+          </div>
+          <Nav
+            className="osac-app-shell-nav"
+            aria-label="Primary"
+            onSelect={(_event, item) => {
+              const nextNavId = String(item.itemId)
+              if (disabledNavIds.includes(nextNavId)) {
+                return
+              }
+              if (onNavChange) {
+                onNavChange(nextNavId)
+              } else {
+                setInternalActiveNavId(nextNavId)
+              }
+            }}
+          >
+            {navGroups.length > 0 ? (
+              navGroups.map((group) => (
+                <NavGroup key={group.id} title={group.label}>
+                  {group.items.map((item) => renderNavItem(item))}
+                </NavGroup>
+              ))
+            ) : (
+              <NavList>{navItems.map((item) => renderNavItem(item))}</NavList>
+            )}
+          </Nav>
+        </div>
       </PageSidebarBody>
     </PageSidebar>
   )

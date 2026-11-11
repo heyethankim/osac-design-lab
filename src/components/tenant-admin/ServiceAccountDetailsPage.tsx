@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Content,
@@ -15,17 +15,26 @@ import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/reac
 import { EntityDetailsPageShell } from '../shared/EntityDetailsPageShell'
 import { EntityDetailsActionsDropdown } from '../shared/EntityDetailsActionsDropdown'
 import { BindServiceAccountRoleModal } from './BindServiceAccountRoleModal'
+import { ServiceAccountCredentialsPanel } from './ServiceAccountCredentialsPanel'
+import { ServiceAccountRegenerateSecretModal } from './ServiceAccountRegenerateSecretModal'
 import { ServiceAccountTokenRevealModal } from './ServiceAccountTokenRevealModal'
 import { getAssignableTenantRole, type AssignableTenantRoleId } from '../../tenantAdmin/administrators'
 import {
   bindServiceAccountRole,
   createServiceAccountToken,
   deleteServiceAccountToken,
+  ensureServiceAccountSingleCredential,
   formatServiceAccountCreatedAtLong,
+  getServiceAccountStatus,
+  getServiceAccountStatusColor,
+  getServiceAccountStatusLabel,
   getServiceAccountTokenValue,
   listServiceAccountTokenSecrets,
+  regenerateServiceAccountSecret,
+  SERVICE_ACCOUNT_DESIGN2_ROLE_LABELS,
   TENANT_SERVICE_ACCOUNTS_DEMO,
   unbindServiceAccountRole,
+  type ServiceAccountsDesignVariant,
   type TenantServiceAccount,
 } from '../../tenantAdmin/serviceAccounts'
 import type { TenantSecret } from '../../tenant/secrets'
@@ -38,6 +47,12 @@ type ServiceAccountDetailsPageProps = {
   onAccountChange: (account: TenantServiceAccount) => void
   onEdit: () => void
   onDelete: () => void
+  designVariant?: ServiceAccountsDesignVariant
+  /** Design 2: open focused on Permissions (e.g. Assign Roles from credentials). */
+  focusPermissions?: boolean
+  onFocusPermissionsConsumed?: () => void
+  /** Design 2: open credentials/regenerate after create. */
+  openCredentialsOnMount?: boolean
 }
 
 export function ServiceAccountDetailsPage({
@@ -47,14 +62,54 @@ export function ServiceAccountDetailsPage({
   onAccountChange,
   onEdit,
   onDelete,
+  designVariant = '1',
+  focusPermissions = false,
+  onFocusPermissionsConsumed,
+  openCredentialsOnMount = false,
 }: ServiceAccountDetailsPageProps) {
+  const isDesign2 = designVariant === '2'
+  const status = getServiceAccountStatus(account)
+  const isDeleting = status === 'deleting'
+  const permissionsRef = useRef<HTMLDivElement | null>(null)
   const [bindRoleAccount, setBindRoleAccount] = useState<TenantServiceAccount | null>(null)
   const [revealedSecret, setRevealedSecret] = useState<TenantSecret | null>(null)
+  const [isRegenerateOpen, setIsRegenerateOpen] = useState(false)
+  const [regeneratedCredentials, setRegeneratedCredentials] = useState<{
+    clientId: string
+    clientSecret: string
+  } | null>(null)
+
+  useEffect(() => {
+    if (!isDesign2 || isDeleting) {
+      return
+    }
+    const ensured = ensureServiceAccountSingleCredential(tenantSlug, account.id)
+    if (ensured && ensured.tokenSecretIds.join('|') !== account.tokenSecretIds.join('|')) {
+      onAccountChange(ensured)
+    }
+  }, [account, isDeleting, isDesign2, onAccountChange, tenantSlug])
+
+  useEffect(() => {
+    if (!focusPermissions) {
+      return
+    }
+    permissionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setBindRoleAccount(account)
+    onFocusPermissionsConsumed?.()
+  }, [account, focusPermissions, onFocusPermissionsConsumed])
+
+  useEffect(() => {
+    if (openCredentialsOnMount && isDesign2) {
+      setIsRegenerateOpen(false)
+    }
+  }, [isDesign2, openCredentialsOnMount])
 
   const tokenSecrets = useMemo(
     () => listServiceAccountTokenSecrets(tenantSlug, account),
     [account, tenantSlug],
   )
+  const activeSecret = tokenSecrets[0] ?? null
+  const clientSecret = activeSecret ? getServiceAccountTokenValue(activeSecret) : ''
 
   const handleCreateKey = () => {
     const result = createServiceAccountToken(tenantSlug, account.id)
@@ -76,6 +131,18 @@ export function ServiceAccountDetailsPage({
     }
   }
 
+  const handleConfirmRegenerate = () => {
+    const result = regenerateServiceAccountSecret(tenantSlug, account.id)
+    if (!result) {
+      return
+    }
+    onAccountChange(result.account)
+    setRegeneratedCredentials({
+      clientId: result.clientId,
+      clientSecret: result.clientSecret,
+    })
+  }
+
   const handleBindRole = (roleId: AssignableTenantRoleId) => {
     const updated = bindServiceAccountRole(tenantSlug, account.id, roleId)
     if (updated) {
@@ -90,6 +157,9 @@ export function ServiceAccountDetailsPage({
     }
   }
 
+  const roleLabel = (roleId: AssignableTenantRoleId) =>
+    isDesign2 ? SERVICE_ACCOUNT_DESIGN2_ROLE_LABELS[roleId] : getAssignableTenantRole(roleId).label
+
   return (
     <>
       <EntityDetailsPageShell
@@ -98,23 +168,41 @@ export function ServiceAccountDetailsPage({
         onBack={onBack}
         title={account.name}
         titleId="service-account-details-title"
-        description={account.description.trim() || undefined}
+        description={isDesign2 ? undefined : account.description.trim() || undefined}
         icon={renderInventoryCardIcon(SERVICE_ACCOUNT_CARD_ICON)}
         actions={
           <EntityDetailsActionsDropdown
-            onEdit={onEdit}
-            onRemove={onDelete}
+            onEdit={isDesign2 || isDeleting ? undefined : onEdit}
+            onRemove={isDeleting ? undefined : onDelete}
             removeLabel="Delete"
-            additionalItems={[
-              {
-                label: TENANT_SERVICE_ACCOUNTS_DEMO.createKeyLabel,
-                onClick: handleCreateKey,
-              },
-              {
-                label: TENANT_SERVICE_ACCOUNTS_DEMO.bindRoleLabel,
-                onClick: () => setBindRoleAccount(account),
-              },
-            ]}
+            additionalItems={
+              isDeleting
+                ? []
+                : isDesign2
+                  ? [
+                      {
+                        label: TENANT_SERVICE_ACCOUNTS_DEMO.regenerateSecretLabel,
+                        onClick: () => {
+                          setRegeneratedCredentials(null)
+                          setIsRegenerateOpen(true)
+                        },
+                      },
+                      {
+                        label: TENANT_SERVICE_ACCOUNTS_DEMO.assignRolesLabel,
+                        onClick: () => setBindRoleAccount(account),
+                      },
+                    ]
+                  : [
+                      {
+                        label: TENANT_SERVICE_ACCOUNTS_DEMO.createKeyLabel,
+                        onClick: handleCreateKey,
+                      },
+                      {
+                        label: TENANT_SERVICE_ACCOUNTS_DEMO.bindRoleLabel,
+                        onClick: () => setBindRoleAccount(account),
+                      },
+                    ]
+            }
           />
         }
       >
@@ -130,14 +218,25 @@ export function ServiceAccountDetailsPage({
                   className="entity-details-page__dl"
                   aria-label="Service account overview"
                 >
-                  <DescriptionListGroup>
-                    <DescriptionListTerm>Project</DescriptionListTerm>
-                    <DescriptionListDescription>
-                      <Label color="green" isCompact>
-                        {account.projectName}
-                      </Label>
-                    </DescriptionListDescription>
-                  </DescriptionListGroup>
+                  {isDesign2 ? (
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>Status</DescriptionListTerm>
+                      <DescriptionListDescription>
+                        <Label color={getServiceAccountStatusColor(status)} isCompact>
+                          {getServiceAccountStatusLabel(status)}
+                        </Label>
+                      </DescriptionListDescription>
+                    </DescriptionListGroup>
+                  ) : (
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>Project</DescriptionListTerm>
+                      <DescriptionListDescription>
+                        <Label color="green" isCompact>
+                          {account.projectName}
+                        </Label>
+                      </DescriptionListDescription>
+                    </DescriptionListGroup>
+                  )}
                   <DescriptionListGroup>
                     <DescriptionListTerm>Created</DescriptionListTerm>
                     <DescriptionListDescription>
@@ -147,129 +246,164 @@ export function ServiceAccountDetailsPage({
                 </DescriptionList>
               </div>
 
-              <div className="entity-details-page__column">
-                <Title headingLevel="h2" size="lg" className="entity-details-page__section-title">
-                  Details
-                </Title>
-                <DescriptionList
-                  isCompact
-                  className="entity-details-page__dl"
-                  aria-label="Service account details"
-                >
-                  <DescriptionListGroup>
-                    <DescriptionListTerm>Labels</DescriptionListTerm>
-                    <DescriptionListDescription>
-                      {account.labels.length > 0 ? (
-                        <div className="tenant-admin-service-accounts__labels">
-                          {account.labels.map((label) => (
-                            <Label key={label} isCompact>
-                              {label}
-                            </Label>
-                          ))}
-                        </div>
-                      ) : (
-                        'No labels'
-                      )}
-                    </DescriptionListDescription>
-                  </DescriptionListGroup>
-                  <DescriptionListGroup>
-                    <DescriptionListTerm>Description</DescriptionListTerm>
-                    <DescriptionListDescription>
-                      {account.description.trim() || '—'}
-                    </DescriptionListDescription>
-                  </DescriptionListGroup>
-                </DescriptionList>
-              </div>
+              {!isDesign2 ? (
+                <div className="entity-details-page__column">
+                  <Title headingLevel="h2" size="lg" className="entity-details-page__section-title">
+                    Details
+                  </Title>
+                  <DescriptionList
+                    isCompact
+                    className="entity-details-page__dl"
+                    aria-label="Service account details"
+                  >
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>Labels</DescriptionListTerm>
+                      <DescriptionListDescription>
+                        {account.labels.length > 0 ? (
+                          <div className="tenant-admin-service-accounts__labels">
+                            {account.labels.map((label) => (
+                              <Label key={label} isCompact>
+                                {label}
+                              </Label>
+                            ))}
+                          </div>
+                        ) : (
+                          'No labels'
+                        )}
+                      </DescriptionListDescription>
+                    </DescriptionListGroup>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>Description</DescriptionListTerm>
+                      <DescriptionListDescription>
+                        {account.description.trim() || '—'}
+                      </DescriptionListDescription>
+                    </DescriptionListGroup>
+                  </DescriptionList>
+                </div>
+              ) : null}
             </div>
 
             <div className="tenant-admin-service-account-details__related-row">
               <Divider className="entity-details-page__band-divider" />
               <div className="tenant-admin-service-account-details__related-section">
-                <div className="entity-details-page__section-header entity-details-page__section-header--related-resources">
-                  <Title
-                    headingLevel="h2"
-                    size="xl"
-                    className="entity-details-page__section-title entity-details-page__section-title--related-resources"
-                  >
-                    Keys
-                  </Title>
-                  <Button
-                    variant="link"
-                    isInline
-                    icon={<PlusCircleIcon />}
-                    className="entity-details-page__add-node-set"
-                    onClick={handleCreateKey}
-                  >
-                    Add
-                  </Button>
-                </div>
-                <Content component="p" className="tenant-admin-service-accounts__section-help">
-                  {TENANT_SERVICE_ACCOUNTS_DEMO.keysSectionHelp}
-                </Content>
-                {tokenSecrets.length === 0 ? (
-                  <Content component="p" className="tenant-admin-service-accounts__empty-section">
-                    No keys yet. Create a key for tools that need access outside the platform.
-                  </Content>
+                {isDesign2 ? (
+                  <>
+                    <div className="entity-details-page__section-header entity-details-page__section-header--related-resources">
+                      <Title
+                        headingLevel="h2"
+                        size="xl"
+                        className="entity-details-page__section-title entity-details-page__section-title--related-resources"
+                      >
+                        Credentials
+                      </Title>
+                    </div>
+                    <ServiceAccountCredentialsPanel
+                      tenantSlug={tenantSlug}
+                      accountName={account.name}
+                      clientSecret={clientSecret}
+                      isRegenerateDisabled={isDeleting}
+                      onRegenerate={
+                        isDeleting
+                          ? undefined
+                          : () => {
+                              setRegeneratedCredentials(null)
+                              setIsRegenerateOpen(true)
+                            }
+                      }
+                    />
+                  </>
                 ) : (
-                  <Table
-                    aria-label="Service account keys"
-                    className="catalog-data-table tenant-admin-service-accounts__related-table"
-                  >
-                    <Thead>
-                      <Tr>
-                        <Th>Secret</Th>
-                        <Th>Created</Th>
-                        <Th screenReaderText="Actions" />
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {tokenSecrets.map((secret) => (
-                        <Tr key={secret.id}>
-                          <Td dataLabel="Secret">
-                            <Content
-                              component="p"
-                              className="tenant-admin-administration__primary-cell"
-                            >
-                              {secret.name}
-                            </Content>
-                            <Content
-                              component="p"
-                              className="tenant-admin-administration__meta-cell"
-                            >
-                              {getServiceAccountTokenValue(secret) ? 'token' : '—'}
-                            </Content>
-                          </Td>
-                          <Td dataLabel="Created">
-                            {formatServiceAccountCreatedAtLong(secret.createdAt)}
-                          </Td>
-                          <Td isActionCell>
-                            <ActionsColumn
-                              items={[
-                                {
-                                  title: 'View key',
-                                  onClick: () => handleViewKey(secret),
-                                },
-                                {
-                                  isSeparator: true,
-                                },
-                                {
-                                  title: 'Delete key',
-                                  isDanger: true,
-                                  onClick: () => handleDeleteKey(secret.id),
-                                },
-                              ]}
-                            />
-                          </Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
+                  <>
+                    <div className="entity-details-page__section-header entity-details-page__section-header--related-resources">
+                      <Title
+                        headingLevel="h2"
+                        size="xl"
+                        className="entity-details-page__section-title entity-details-page__section-title--related-resources"
+                      >
+                        Keys
+                      </Title>
+                      <Button
+                        variant="link"
+                        isInline
+                        icon={<PlusCircleIcon />}
+                        className="entity-details-page__add-node-set"
+                        onClick={handleCreateKey}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                    <Content component="p" className="tenant-admin-service-accounts__section-help">
+                      {TENANT_SERVICE_ACCOUNTS_DEMO.keysSectionHelp}
+                    </Content>
+                    {tokenSecrets.length === 0 ? (
+                      <Content
+                        component="p"
+                        className="tenant-admin-service-accounts__empty-section"
+                      >
+                        No keys yet. Create a key for tools that need access outside the platform.
+                      </Content>
+                    ) : (
+                      <Table
+                        aria-label="Service account keys"
+                        className="catalog-data-table tenant-admin-service-accounts__related-table"
+                      >
+                        <Thead>
+                          <Tr>
+                            <Th>Secret</Th>
+                            <Th>Created</Th>
+                            <Th screenReaderText="Actions" />
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {tokenSecrets.map((secret) => (
+                            <Tr key={secret.id}>
+                              <Td dataLabel="Secret">
+                                <Content
+                                  component="p"
+                                  className="tenant-admin-administration__primary-cell"
+                                >
+                                  {secret.name}
+                                </Content>
+                                <Content
+                                  component="p"
+                                  className="tenant-admin-administration__meta-cell"
+                                >
+                                  {getServiceAccountTokenValue(secret) ? 'token' : '—'}
+                                </Content>
+                              </Td>
+                              <Td dataLabel="Created">
+                                {formatServiceAccountCreatedAtLong(secret.createdAt)}
+                              </Td>
+                              <Td isActionCell>
+                                <ActionsColumn
+                                  items={[
+                                    {
+                                      title: 'View key',
+                                      onClick: () => handleViewKey(secret),
+                                    },
+                                    {
+                                      isSeparator: true,
+                                    },
+                                    {
+                                      title: 'Delete key',
+                                      isDanger: true,
+                                      onClick: () => handleDeleteKey(secret.id),
+                                    },
+                                  ]}
+                                />
+                              </Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    )}
+                  </>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="entity-details-page__rail-stack">
+          <div className="entity-details-page__rail-stack" ref={permissionsRef}>
             <div className="entity-details-page__column entity-details-page__column--config">
               <div className="entity-details-page__column-block">
                 <div className="entity-details-page__section-header entity-details-page__section-header--config">
@@ -280,15 +414,19 @@ export function ServiceAccountDetailsPage({
                   >
                     Permissions
                   </Title>
-                  <Button
-                    variant="link"
-                    isInline
-                    icon={<PlusCircleIcon />}
-                    className="entity-details-page__add-node-set"
-                    onClick={() => setBindRoleAccount(account)}
-                  >
-                    {TENANT_SERVICE_ACCOUNTS_DEMO.bindRoleLabel}
-                  </Button>
+                  {!isDeleting ? (
+                    <Button
+                      variant="link"
+                      isInline
+                      icon={<PlusCircleIcon />}
+                      className="entity-details-page__add-node-set"
+                      onClick={() => setBindRoleAccount(account)}
+                    >
+                      {isDesign2
+                        ? TENANT_SERVICE_ACCOUNTS_DEMO.assignRolesLabel
+                        : TENANT_SERVICE_ACCOUNTS_DEMO.bindRoleLabel}
+                    </Button>
+                  ) : null}
                 </div>
                 <Content component="p" className="tenant-admin-service-accounts__section-help">
                   {TENANT_SERVICE_ACCOUNTS_DEMO.rolesSectionHelp}
@@ -308,17 +446,19 @@ export function ServiceAccountDetailsPage({
                         <li key={binding.id} className="entity-details-page__node-set-item">
                           <div className="entity-details-page__node-set-item-header">
                             <Label color={role.color} isCompact>
-                              {role.label}
+                              {roleLabel(binding.roleId)}
                             </Label>
-                            <ActionsColumn
-                              items={[
-                                {
-                                  title: 'Remove',
-                                  isDanger: true,
-                                  onClick: () => handleUnbindRole(binding.id),
-                                },
-                              ]}
-                            />
+                            {!isDeleting ? (
+                              <ActionsColumn
+                                items={[
+                                  {
+                                    title: 'Remove',
+                                    isDanger: true,
+                                    onClick: () => handleUnbindRole(binding.id),
+                                  },
+                                ]}
+                              />
+                            ) : null}
                           </div>
                           <Content component="p" className="entity-details-page__node-set-meta">
                             {role.description}
@@ -344,6 +484,16 @@ export function ServiceAccountDetailsPage({
         secret={revealedSecret}
         serviceAccountName={account.name}
         onClose={() => setRevealedSecret(null)}
+      />
+      <ServiceAccountRegenerateSecretModal
+        isOpen={isRegenerateOpen}
+        accountName={account.name}
+        revealed={regeneratedCredentials}
+        onConfirm={handleConfirmRegenerate}
+        onClose={() => {
+          setIsRegenerateOpen(false)
+          setRegeneratedCredentials(null)
+        }}
       />
     </>
   )

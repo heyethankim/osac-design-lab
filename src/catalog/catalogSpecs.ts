@@ -83,12 +83,6 @@ export const VM_NETWORK_ATTACHMENTS_RATE_CARD = {
   billingUnit: 'per-instance' as const,
 }
 
-const VM_NETWORK_ATTACHMENTS_SPEC_ROWS: CatalogSpecRow[] = [
-  { label: 'Instance type', value: 'Standard' },
-  { label: 'Size', value: '4 vCPU · 16 GB RAM' },
-  { label: 'OS image', value: 'RHEL 9.4' },
-]
-
 /** Extra drawer-only rows for Virtual Machine offerings. */
 const VM_NETWORK_ATTACHMENTS_DETAIL_ROWS: CatalogSpecRow[] = [
   {
@@ -172,20 +166,132 @@ export function resolveCatalogOsImage(
   return '—'
 }
 
-const VM_CATALOG_HIGHLIGHT_LABELS = ['Instance type', 'Size', 'OS image'] as const
+const VM_CATALOG_HIGHLIGHT_LABELS = [
+  'Instance type',
+  'CPU',
+  'RAM',
+  'GPU',
+  'OS image',
+] as const
 
-/** Instance type, Size, and OS image for Virtual Machine catalog drawers. */
+type VmInstanceHardware = {
+  sizeLabel: string
+  cpu: string
+  ram: string
+  gpu: string
+}
+
+const VM_INSTANCE_TYPE_HARDWARE: Readonly<Record<string, VmInstanceHardware>> = {
+  standard: { sizeLabel: 'Standard', cpu: '4 vCPU', ram: '16 GB', gpu: 'None' },
+  'vm-type-1-small': { sizeLabel: 'Small', cpu: '1 vCPU', ram: '2 GB', gpu: 'None' },
+  'vm-type-1-medium': { sizeLabel: 'Medium', cpu: '2 vCPU', ram: '10 GB', gpu: 'None' },
+  'vm-type-1-large': { sizeLabel: 'Large', cpu: '4 vCPU', ram: '16 GB', gpu: 'None' },
+  'vm-type-1-gpu-small': { sizeLabel: 'GPU Small', cpu: '4 vCPU', ram: '16 GB', gpu: '1 GPU' },
+  'vm-type-1-gpu-large': { sizeLabel: 'GPU Large', cpu: '8 vCPU', ram: '32 GB', gpu: '2 GPU' },
+}
+
+/** Parse `Medium (2 vCPU · 10 GB RAM)` / `GPU Small (4 vCPU · 16 GB · 1 GPU)`. */
+export function resolveVmInstanceTypeHardware(
+  instanceTypeId?: string | null,
+  instanceTypeLabel?: string | null,
+): VmInstanceHardware | null {
+  const byId = instanceTypeId?.trim()
+    ? VM_INSTANCE_TYPE_HARDWARE[instanceTypeId.trim()]
+    : undefined
+  if (byId) {
+    return byId
+  }
+
+  const rawLabel = instanceTypeLabel?.trim()
+  if (!rawLabel) {
+    return null
+  }
+
+  const { label, size } = parseCatalogInstanceTypeParts(rawLabel)
+  if (!size) {
+    return { sizeLabel: label || rawLabel, cpu: '—', ram: '—', gpu: 'None' }
+  }
+
+  const parts = size.split('·').map((part) => part.trim()).filter(Boolean)
+  return {
+    sizeLabel: label || rawLabel,
+    cpu: parts[0] ?? '—',
+    ram: parts[1] ?? '—',
+    gpu: parts[2] ?? 'None',
+  }
+}
+
+/**
+ * Virtual machine card/list rows match bare metal:
+ * Instance type (Locked/Editable) + CPU/RAM/GPU + OS image (Locked/Editable).
+ */
+function buildVirtualMachineCatalogSpecRows(
+  item: Pick<
+    ProviderCatalogDraft,
+    | 'instanceTypeId'
+    | 'instanceTypeLabel'
+    | 'diskImageId'
+    | 'diskImageLabel'
+    | 'hardwareOsMode'
+    | 'osImageMode'
+  >,
+  options?: { includeDetails?: boolean },
+): CatalogSpecRow[] {
+  const hardware = resolveVmInstanceTypeHardware(item.instanceTypeId, item.instanceTypeLabel)
+  const diskImage =
+    formatCatalogDiskImageLabel(item.diskImageId, item.diskImageLabel) ??
+    item.diskImageLabel?.trim() ??
+    '—'
+  const hardwareOsBadge = getHardwareOsModeBadge(item.hardwareOsMode)
+  const osImageBadge = getOsImageModeBadge(item.osImageMode, item.hardwareOsMode)
+
+  const rows: CatalogSpecRow[] = hardware
+    ? [
+        { label: 'Instance type', value: hardware.sizeLabel, badge: hardwareOsBadge },
+        { label: 'CPU', value: hardware.cpu },
+        { label: 'RAM', value: hardware.ram },
+        { label: 'GPU', value: hardware.gpu },
+        { label: 'OS image', value: diskImage, badge: osImageBadge },
+      ]
+    : [
+        ...(item.instanceTypeLabel
+          ? [
+              {
+                label: 'Instance type',
+                value: parseCatalogInstanceTypeParts(item.instanceTypeLabel).label,
+                badge: hardwareOsBadge,
+              } satisfies CatalogSpecRow,
+            ]
+          : []),
+        { label: 'CPU', value: '—' },
+        { label: 'RAM', value: '—' },
+        { label: 'GPU', value: 'None' },
+        { label: 'OS image', value: diskImage, badge: osImageBadge },
+      ]
+
+  if (options?.includeDetails) {
+    return [...rows, ...VM_NETWORK_ATTACHMENTS_DETAIL_ROWS]
+  }
+
+  return rows
+}
+
+/** Instance type + CPU/RAM/GPU + OS image for Virtual Machine catalog drawers. */
 export function resolveVmCatalogHighlightRows(
   item: Pick<
     ProviderCatalogDraft,
     | 'serviceId'
     | 'templateRefId'
     | 'templateName'
+    | 'instanceTypeId'
     | 'instanceTypeLabel'
+    | 'diskImageId'
     | 'diskImageLabel'
+    | 'hardwareOsMode'
+    | 'osImageMode'
   >,
 ): CatalogSpecRow[] {
-  const rows = resolveCatalogSpecRows(item)
+  const rows = buildVirtualMachineCatalogSpecRows(item)
   return VM_CATALOG_HIGHLIGHT_LABELS.map((label) => rows.find((row) => row.label === label)).filter(
     (row): row is CatalogSpecRow => Boolean(row),
   )
@@ -250,14 +356,58 @@ function getOsImageModeBadge(
 /** Parent row for nested node-set children (matches Instance type → CPU/RAM/GPU). */
 export const CLUSTER_NODE_SETS_PARENT_LABEL = 'Node sets'
 
+/** Card/list summary: "3 pools · 10 nodes". */
+export function formatClusterTopologySummary(
+  topology: ReadonlyArray<CatalogClusterTopologyNodeSet>,
+): string {
+  const pools = topology.length
+  const nodes = topology.reduce((sum, row) => sum + row.nodeCount, 0)
+  const poolLabel = pools === 1 ? 'pool' : 'pools'
+  const nodeLabel = nodes === 1 ? 'node' : 'nodes'
+  return `${pools} ${poolLabel} · ${nodes} ${nodeLabel}`
+}
+
+function getAddonOperatorShortName(operatorId: string): string {
+  switch (operatorId) {
+    case 'nvidia-gpu-operator':
+      return 'NVIDIA GPU'
+    case 'node-feature-discovery':
+      return 'NFD'
+    default:
+      return operatorId
+  }
+}
+
+function getAddonOperatorsModeBadge(
+  mode: 'locked' | 'editable' | undefined | null,
+): CatalogSpecRow['badge'] {
+  const resolved = mode === 'editable' ? 'editable' : 'locked'
+  return {
+    text: resolved === 'editable' ? 'Editable' : 'Locked',
+    color: resolved === 'editable' ? 'purple' : 'grey',
+  }
+}
+
 function buildClusterTopologySpecRows(
   topology: ReadonlyArray<CatalogClusterTopologyNodeSet>,
   options?: {
     compact?: boolean
     topologyMode?: CatalogClusterNodeTopologyMode
+    summaryOnly?: boolean
   },
 ): CatalogSpecRow[] {
   const topologyBadge = getClusterNodeTopologyModeBadge(options?.topologyMode)
+
+  if (options?.summaryOnly) {
+    return [
+      {
+        label: CLUSTER_NODE_SETS_PARENT_LABEL,
+        value: formatClusterTopologySummary(topology),
+        badge: topologyBadge,
+      },
+    ]
+  }
+
   const rows: CatalogSpecRow[] = [
     {
       label: CLUSTER_NODE_SETS_PARENT_LABEL,
@@ -286,9 +436,12 @@ function buildClusterCatalogSpecRows(
     | 'hostTypeLabel'
     | 'clusterNodeTopologyMode'
     | 'clusterTopology'
+    | 'addonOperators'
+    | 'addonOperatorsMode'
   >,
   options?: { includeDetails?: boolean },
 ): CatalogSpecRow[] {
+  const includeDetails = Boolean(options?.includeDetails)
   const versionLabel = resolveClusterVersionDisplayLabel(item)
   const topology = resolveCatalogClusterTopology(item.clusterTopology)
   const rows: CatalogSpecRow[] = [
@@ -298,13 +451,23 @@ function buildClusterCatalogSpecRows(
       badge: getClusterVersionModeBadge(item.clusterVersionMode),
     },
     ...buildClusterTopologySpecRows(topology, {
-      compact: !options?.includeDetails,
+      compact: !includeDetails,
       topologyMode: item.clusterNodeTopologyMode,
+      summaryOnly: !includeDetails,
     }),
   ]
 
-  if (options?.includeDetails && CLUSTER_NODE_SETS_DETAIL_ROWS.length > 0) {
+  if (includeDetails && CLUSTER_NODE_SETS_DETAIL_ROWS.length > 0) {
     rows.push(...CLUSTER_NODE_SETS_DETAIL_ROWS)
+  }
+
+  const addonOperators = item.addonOperators ?? []
+  if (addonOperators.length > 0) {
+    rows.push({
+      label: 'Add-on operators',
+      value: addonOperators.map((selection) => getAddonOperatorShortName(selection.operatorId)).join(', '),
+      badge: getAddonOperatorsModeBadge(item.addonOperatorsMode),
+    })
   }
 
   return rows
@@ -408,9 +571,14 @@ export function resolveBaremetalCatalogCardSpecRows(
 export function resolveCatalogCardSpecRows(
   item: Parameters<typeof resolveCatalogSpecRows>[0],
 ): CatalogSpecRow[] {
-  return getDraftServiceId(item) === 'baremetal'
-    ? resolveBaremetalCatalogCardSpecRows(item)
-    : resolveCatalogSpecRows(item)
+  const serviceId = getDraftServiceId(item)
+  if (serviceId === 'baremetal') {
+    return resolveBaremetalCatalogCardSpecRows(item)
+  }
+  if (serviceId === 'virtual-machine') {
+    return buildVirtualMachineCatalogSpecRows(item)
+  }
+  return resolveCatalogSpecRows(item)
 }
 
 export function resolveCatalogSpecRows(
@@ -430,6 +598,8 @@ export function resolveCatalogSpecRows(
     | 'hostTypeLabel'
     | 'clusterNodeTopologyMode'
     | 'clusterTopology'
+    | 'addonOperators'
+    | 'addonOperatorsMode'
     | 'hardwareOsMode'
     | 'osImageMode'
   >,
@@ -445,40 +615,21 @@ export function resolveCatalogSpecRows(
     return buildBaremetalCatalogSpecRows(item)
   }
 
+  if (serviceId === 'virtual-machine') {
+    return buildVirtualMachineCatalogSpecRows(item, options)
+  }
+
   if (item.instanceTypeLabel || item.diskImageLabel) {
     const rows: CatalogSpecRow[] = []
 
-    if (serviceId === 'virtual-machine') {
-      if (item.instanceTypeLabel) {
-        const { label, size } = parseCatalogInstanceTypeParts(item.instanceTypeLabel)
-        rows.push({ label: 'Instance type', value: label })
-        if (size) {
-          rows.push({ label: 'Size', value: size })
-        }
-      }
-      if (item.diskImageLabel) {
-        rows.push({ label: 'OS image', value: item.diskImageLabel })
-      }
-    } else {
-      if (item.instanceTypeLabel) {
-        rows.push({ label: 'Instance type', value: item.instanceTypeLabel })
-      }
-      if (item.diskImageLabel) {
-        rows.push({ label: 'OS image', value: item.diskImageLabel })
-      }
+    if (item.instanceTypeLabel) {
+      rows.push({ label: 'Instance type', value: item.instanceTypeLabel })
     }
-
-    if (serviceId === 'virtual-machine' && options?.includeDetails) {
-      return [...rows, ...VM_NETWORK_ATTACHMENTS_DETAIL_ROWS]
+    if (item.diskImageLabel) {
+      rows.push({ label: 'OS image', value: item.diskImageLabel })
     }
 
     return rows
-  }
-
-  if (serviceId === 'virtual-machine') {
-    return options?.includeDetails
-      ? [...VM_NETWORK_ATTACHMENTS_SPEC_ROWS, ...VM_NETWORK_ATTACHMENTS_DETAIL_ROWS]
-      : VM_NETWORK_ATTACHMENTS_SPEC_ROWS
   }
 
   const hardware = resolveHardwareSpecsForCatalogItem(item)

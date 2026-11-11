@@ -6,9 +6,15 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { Nav, NavExpandable, NavItem, NavList } from '@patternfly/react-core'
+import { Divider, Nav, NavExpandable, NavItem, NavList } from '@patternfly/react-core'
 import { BarsIcon } from '@patternfly/react-icons/dist/esm/icons/bars-icon'
+import redHatHatLogoUrl from '../assets/Logo-RedHat-Hat-Color-RGB.svg?url'
+import { NorthsummitBankMastheadLogo } from '../components/tenant/NorthsummitBankMastheadLogo'
 import type { PersonaNavConfig } from './navData'
+
+function usesNorthSummitBrand(personaId: PersonaNavConfig['id']): boolean {
+  return personaId === 'tenant-admin' || personaId === 'tenant-user'
+}
 
 type PersonaNavColumnProps = {
   config: PersonaNavConfig
@@ -105,9 +111,28 @@ export function PersonaNavColumn({ config, tipActive, onActivate }: PersonaNavCo
           <span className="nav-compare__toggle" aria-hidden>
             <BarsIcon />
           </span>
+          {usesNorthSummitBrand(config.id) ? (
+            <div className="nav-compare__brand nav-compare__brand--northsummit">
+              <NorthsummitBankMastheadLogo />
+            </div>
+          ) : (
+            <div className="nav-compare__brand nav-compare__brand--redhat" aria-label="Red Hat">
+              <img
+                className="nav-compare__brand-logo"
+                src={redHatHatLogoUrl}
+                alt=""
+                draggable={false}
+              />
+              <span className="nav-compare__brand-wordmark">Red Hat</span>
+            </div>
+          )}
         </header>
 
         <div className="nav-compare__sidebar">
+          <div className="osac-shell-sidebar-product nav-compare__product">
+            <p className="osac-shell-sidebar-product__title">Cloud Extensions</p>
+            <Divider className="osac-shell-sidebar-product__divider" />
+          </div>
           <Nav
             onSelect={onNavSelect}
             onToggle={onNavToggle}

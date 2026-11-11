@@ -32,16 +32,29 @@ import {
 import { ViewModeToggle } from '../../components/catalog/CatalogViewToggle'
 import { getAdministrationViewMode, setAdministrationViewMode, type ViewMode } from '../../catalog/viewMode'
 import { CreateServiceAccountWizard } from '../../components/tenant-admin/CreateServiceAccountWizard'
+import { ServiceAccountCredentialsModal } from '../../components/tenant-admin/ServiceAccountCredentialsModal'
 import { ServiceAccountDetailsPage } from '../../components/tenant-admin/ServiceAccountDetailsPage'
+import { ServiceAccountRegenerateSecretModal } from '../../components/tenant-admin/ServiceAccountRegenerateSecretModal'
 import { ProviderAdminWorkspacePageHeader } from '../../components/provider-admin/ProviderAdminWorkspacePageHeader'
+import { TOPIC_SERVICE_ACCOUNTS } from '../../designHub/topics'
 import {
+  buildServiceAccountClientId,
   buildServiceAccountFilterParts,
   deleteTenantServiceAccount,
+  ensureServiceAccountSingleCredential,
   formatServiceAccountCreatedAt,
+  getServiceAccountStatus,
+  getServiceAccountStatusColor,
+  getServiceAccountStatusLabel,
+  getServiceAccountTokenValue,
   getTenantServiceAccountById,
+  listServiceAccountTokenSecrets,
   listTenantServiceAccounts,
+  markTenantServiceAccountDeleting,
+  regenerateServiceAccountSecret,
   TENANT_SERVICE_ACCOUNTS_DEMO,
   type ServiceAccountProjectFilter,
+  type ServiceAccountsDesignVariant,
   type TenantServiceAccount,
 } from '../../tenantAdmin/serviceAccounts'
 import { getTenantProjects } from '../../tenantAdmin/storage'
@@ -55,8 +68,27 @@ type TenantAdminServiceAccountsPageProps = {
   tenantSlug: string
 }
 
+function resolveServiceAccountsDesign(
+  searchParams: URLSearchParams,
+): ServiceAccountsDesignVariant {
+  const topic = searchParams.get('topic')?.trim()
+  const design = searchParams.get('design')?.trim()
+  if (topic === TOPIC_SERVICE_ACCOUNTS && design === '2') {
+    return '2'
+  }
+  return '1'
+}
+
+function getAccountClientSecret(tenantSlug: string, account: TenantServiceAccount): string {
+  const ensured = ensureServiceAccountSingleCredential(tenantSlug, account.id) ?? account
+  const secret = listServiceAccountTokenSecrets(tenantSlug, ensured)[0]
+  return secret ? getServiceAccountTokenValue(secret) : ''
+}
+
 export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServiceAccountsPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
+  const designVariant = resolveServiceAccountsDesign(searchParams)
+  const isDesign2 = designVariant === '2'
   const [accounts, setAccounts] = useState<TenantServiceAccount[]>(() =>
     listTenantServiceAccounts(tenantSlug),
   )
@@ -69,6 +101,13 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
     null,
   )
   const [accountPendingEdit, setAccountPendingEdit] = useState<TenantServiceAccount | null>(null)
+  const [credentialsAccount, setCredentialsAccount] = useState<TenantServiceAccount | null>(null)
+  const [regenerateAccount, setRegenerateAccount] = useState<TenantServiceAccount | null>(null)
+  const [regeneratedCredentials, setRegeneratedCredentials] = useState<{
+    clientId: string
+    clientSecret: string
+  } | null>(null)
+  const [focusPermissionsOnOpen, setFocusPermissionsOnOpen] = useState(false)
 
   const projects = useMemo(() => getTenantProjects(tenantSlug), [tenantSlug])
   const selectedAccount = selectedAccountId
@@ -105,7 +144,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
     const query = searchValue.trim().toLowerCase()
 
     return accounts.filter((account) => {
-      if (selectedProject !== 'all' && account.projectId !== selectedProject) {
+      if (!isDesign2 && selectedProject !== 'all' && account.projectId !== selectedProject) {
         return false
       }
 
@@ -113,16 +152,26 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
         return true
       }
 
+      const clientId = buildServiceAccountClientId(tenantSlug, account.name).toLowerCase()
+
       return (
         account.name.toLowerCase().includes(query) ||
         account.description.toLowerCase().includes(query) ||
-        account.projectName.toLowerCase().includes(query) ||
-        account.labels.some((label) => label.toLowerCase().includes(query))
+        (!isDesign2 && account.projectName.toLowerCase().includes(query)) ||
+        account.labels.some((label) => label.toLowerCase().includes(query)) ||
+        (isDesign2 && clientId.includes(query)) ||
+        (isDesign2 &&
+          getServiceAccountStatusLabel(getServiceAccountStatus(account))
+            .toLowerCase()
+            .includes(query))
       )
     })
-  }, [accounts, searchValue, selectedProject])
+  }, [accounts, isDesign2, searchValue, selectedProject, tenantSlug])
 
   const filterDescriptionParts = useMemo(() => {
+    if (isDesign2) {
+      return buildServiceAccountFilterParts(searchValue, 'all')
+    }
     const projectLabel =
       selectedProject === 'all'
         ? 'all'
@@ -131,7 +180,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
       searchValue,
       selectedProject === 'all' ? 'all' : projectLabel,
     )
-  }, [projects, searchValue, selectedProject])
+  }, [isDesign2, projects, searchValue, selectedProject])
 
   const isUnfilteredEmpty = accounts.length === 0
 
@@ -152,9 +201,15 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
   const handleCreated = (account: TenantServiceAccount) => {
     refreshAccounts()
     setSelectedAccountId(account.id)
+    if (isDesign2) {
+      setCredentialsAccount(account)
+    }
   }
 
   const openEdit = (account: TenantServiceAccount) => {
+    if (isDesign2 || getServiceAccountStatus(account) === 'deleting') {
+      return
+    }
     setAccountPendingEdit(account)
   }
 
@@ -172,32 +227,94 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
       return
     }
 
-    const next = deleteTenantServiceAccount(tenantSlug, accountPendingDelete.id)
-    setAccounts(next)
-    if (selectedAccountId === accountPendingDelete.id) {
-      setSelectedAccountId(null)
+    if (isDesign2) {
+      const next = markTenantServiceAccountDeleting(tenantSlug, accountPendingDelete.id)
+      setAccounts(next)
+      setSelectedAccountId(accountPendingDelete.id)
+    } else {
+      const next = deleteTenantServiceAccount(tenantSlug, accountPendingDelete.id)
+      setAccounts(next)
+      if (selectedAccountId === accountPendingDelete.id) {
+        setSelectedAccountId(null)
+      }
     }
     setAccountPendingDelete(null)
   }
 
-  const getRowActions = (account: TenantServiceAccount): IAction[] => [
-    {
-      title: 'View details',
-      onClick: () => setSelectedAccountId(account.id),
-    },
-    {
-      title: 'Edit',
-      onClick: () => openEdit(account),
-    },
-    {
-      isSeparator: true,
-    },
-    {
-      title: 'Delete',
-      isDanger: true,
-      onClick: () => setAccountPendingDelete(account),
-    },
-  ]
+  const handleConfirmRegenerate = () => {
+    if (!regenerateAccount) {
+      return
+    }
+    const result = regenerateServiceAccountSecret(tenantSlug, regenerateAccount.id)
+    if (!result) {
+      return
+    }
+    refreshAccounts()
+    setRegeneratedCredentials({
+      clientId: result.clientId,
+      clientSecret: result.clientSecret,
+    })
+    if (credentialsAccount?.id === regenerateAccount.id) {
+      setCredentialsAccount(result.account)
+    }
+  }
+
+  const getRowActions = (account: TenantServiceAccount): IAction[] => {
+    const isDeleting = getServiceAccountStatus(account) === 'deleting'
+    if (isDesign2) {
+      return [
+        {
+          title: 'View details',
+          onClick: () => setSelectedAccountId(account.id),
+        },
+        {
+          title: TENANT_SERVICE_ACCOUNTS_DEMO.viewCredentialsLabel,
+          isDisabled: isDeleting,
+          onClick: () => {
+            ensureServiceAccountSingleCredential(tenantSlug, account.id)
+            refreshAccounts()
+            setCredentialsAccount(getTenantServiceAccountById(tenantSlug, account.id) ?? account)
+          },
+        },
+        {
+          title: TENANT_SERVICE_ACCOUNTS_DEMO.regenerateSecretLabel,
+          isDisabled: isDeleting,
+          onClick: () => {
+            setRegeneratedCredentials(null)
+            setRegenerateAccount(account)
+          },
+        },
+        {
+          isSeparator: true,
+        },
+        {
+          title: 'Delete',
+          isDanger: true,
+          isDisabled: isDeleting,
+          onClick: () => setAccountPendingDelete(account),
+        },
+      ]
+    }
+
+    return [
+      {
+        title: 'View details',
+        onClick: () => setSelectedAccountId(account.id),
+      },
+      {
+        title: 'Edit',
+        onClick: () => openEdit(account),
+      },
+      {
+        isSeparator: true,
+      },
+      {
+        title: 'Delete',
+        isDanger: true,
+        onClick: () => setAccountPendingDelete(account),
+      },
+    ]
+  }
 
   const deleteModal = (
     <Modal
@@ -215,10 +332,19 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
       <ModalBody>
         <Content component="p" id="delete-service-account-description">
           {accountPendingDelete ? (
-            <>
-              <strong>{accountPendingDelete.name}</strong> and its linked token secrets will be
-              removed. Automations using these credentials will stop working. This cannot be undone.
-            </>
+            isDesign2 ? (
+              <>
+                Are you sure you want to delete <strong>{accountPendingDelete.name}</strong>? Access
+                is revoked immediately. The account will show as &apos;Deleting&apos; while cleanup
+                completes.
+              </>
+            ) : (
+              <>
+                <strong>{accountPendingDelete.name}</strong> and its linked token secrets will be
+                removed. Automations using these credentials will stop working. This cannot be
+                undone.
+              </>
+            )
           ) : (
             'This service account and its linked token secrets will be removed.'
           )}
@@ -235,28 +361,71 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
     </Modal>
   )
 
+  const design2Modals = isDesign2 ? (
+    <>
+      <ServiceAccountCredentialsModal
+        isOpen={credentialsAccount !== null}
+        tenantSlug={tenantSlug}
+        accountName={credentialsAccount?.name ?? ''}
+        clientSecret={
+          credentialsAccount ? getAccountClientSecret(tenantSlug, credentialsAccount) : ''
+        }
+        showAssignRoles
+        onAssignRoles={() => {
+          if (!credentialsAccount) {
+            return
+          }
+          setSelectedAccountId(credentialsAccount.id)
+          setFocusPermissionsOnOpen(true)
+          setCredentialsAccount(null)
+        }}
+        onRegenerate={() => {
+          if (!credentialsAccount) {
+            return
+          }
+          setRegeneratedCredentials(null)
+          setRegenerateAccount(credentialsAccount)
+        }}
+        onClose={() => setCredentialsAccount(null)}
+      />
+      <ServiceAccountRegenerateSecretModal
+        isOpen={regenerateAccount !== null}
+        accountName={regenerateAccount?.name ?? ''}
+        revealed={regeneratedCredentials}
+        onConfirm={handleConfirmRegenerate}
+        onClose={() => {
+          setRegenerateAccount(null)
+          setRegeneratedCredentials(null)
+        }}
+      />
+    </>
+  ) : null
+
   if (isWizardOpen) {
     return (
       <>
         <CreateServiceAccountWizard
           isOpen
           tenantSlug={tenantSlug}
+          designVariant={designVariant}
           onClose={closeCreateWizard}
           onCreated={handleCreated}
           parentLabel={TENANT_SERVICE_ACCOUNTS_DEMO.title}
         />
         {deleteModal}
+        {design2Modals}
       </>
     )
   }
 
-  if (accountPendingEdit) {
+  if (accountPendingEdit && !isDesign2) {
     return (
       <>
         <CreateServiceAccountWizard
           isOpen
           mode="edit"
           tenantSlug={tenantSlug}
+          designVariant={designVariant}
           editingAccount={accountPendingEdit}
           onClose={closeEdit}
           onSaved={handleSaved}
@@ -273,6 +442,9 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
         <ServiceAccountDetailsPage
           tenantSlug={tenantSlug}
           account={selectedAccount}
+          designVariant={designVariant}
+          focusPermissions={focusPermissionsOnOpen}
+          onFocusPermissionsConsumed={() => setFocusPermissionsOnOpen(false)}
           onBack={() => setSelectedAccountId(null)}
           onAccountChange={(account) => {
             refreshAccounts()
@@ -282,6 +454,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
           onDelete={() => setAccountPendingDelete(selectedAccount)}
         />
         {deleteModal}
+        {design2Modals}
       </>
     )
   }
@@ -291,7 +464,11 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
       <ProviderAdminWorkspacePageHeader
         kicker="Administration"
         title={TENANT_SERVICE_ACCOUNTS_DEMO.title}
-        lede={TENANT_SERVICE_ACCOUNTS_DEMO.lede}
+        lede={
+          isDesign2
+            ? 'Manage non-human identities for this tenant. Accounts are scoped to the tenant root.'
+            : TENANT_SERVICE_ACCOUNTS_DEMO.lede
+        }
         action={
           isUnfilteredEmpty ? undefined : (
             <Button
@@ -326,20 +503,22 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
         <>
           <div className="catalog-view-toolbar">
             <div className="catalog-view-toolbar__start">
-              <FormSelect
-                className="catalog-status-filter"
-                id="tenant-service-accounts-project-filter"
-                value={selectedProject}
-                onChange={(_event, value) =>
-                  setSelectedProject(value as ServiceAccountProjectFilter)
-                }
-                aria-label="Filter by project"
-              >
-                <FormSelectOption value="all" label="All Projects" />
-                {projects.map((project) => (
-                  <FormSelectOption key={project.id} value={project.id} label={project.name} />
-                ))}
-              </FormSelect>
+              {!isDesign2 ? (
+                <FormSelect
+                  className="catalog-status-filter"
+                  id="tenant-service-accounts-project-filter"
+                  value={selectedProject}
+                  onChange={(_event, value) =>
+                    setSelectedProject(value as ServiceAccountProjectFilter)
+                  }
+                  aria-label="Filter by project"
+                >
+                  <FormSelectOption value="all" label="All Projects" />
+                  {projects.map((project) => (
+                    <FormSelectOption key={project.id} value={project.id} label={project.name} />
+                  ))}
+                </FormSelect>
+              ) : null}
               <SearchInput
                 className="catalog-search"
                 placeholder="Search service accounts"
@@ -360,7 +539,11 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
           {filteredAccounts.length === 0 ? (
             <CatalogFilterEmptyState
               title={TENANT_SERVICE_ACCOUNTS_DEMO.emptyFilteredTitle}
-              description={TENANT_SERVICE_ACCOUNTS_DEMO.emptyFilteredBody}
+              description={
+                isDesign2
+                  ? 'Try a different search term, or clear filters.'
+                  : TENANT_SERVICE_ACCOUNTS_DEMO.emptyFilteredBody
+              }
               onClearFilters={clearAllFilters}
             />
           ) : viewMode === 'grid' ? (
@@ -373,63 +556,80 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
                 onClearFilters={clearAllFilters}
               />
               <div className="catalog-card-grid catalog-card-grid--stable tenant-admin-administration__grid">
-                {filteredAccounts.map((account) => (
-                  <Card
-                    key={account.id}
-                    isCompact={false}
-                    className="tenant-admin-administration__card"
-                  >
-                    <CardBody>
-                      <div className="tenant-admin-administration__card-header">
-                        <span className="tenant-admin-administration__card-icon" aria-hidden>
-                          {renderInventoryCardIcon(SERVICE_ACCOUNT_CARD_ICON)}
-                        </span>
-                        <div className="tenant-admin-administration__card-header-actions">
-                          <Label
-                            color="green"
-                            isCompact
-                            className="tenant-admin-administration__card-label"
-                          >
-                            {account.projectName}
-                          </Label>
-                          <ActionsColumn items={getRowActions(account)} />
+                {filteredAccounts.map((account) => {
+                  const status = getServiceAccountStatus(account)
+                  const clientId = buildServiceAccountClientId(tenantSlug, account.name)
+                  return (
+                    <Card
+                      key={account.id}
+                      isCompact={false}
+                      className="tenant-admin-administration__card"
+                    >
+                      <CardBody>
+                        <div className="tenant-admin-administration__card-header">
+                          <span className="tenant-admin-administration__card-icon" aria-hidden>
+                            {renderInventoryCardIcon(SERVICE_ACCOUNT_CARD_ICON)}
+                          </span>
+                          <div className="tenant-admin-administration__card-header-actions">
+                            <Label
+                              color={
+                                isDesign2 ? getServiceAccountStatusColor(status) : 'green'
+                              }
+                              isCompact
+                              className="tenant-admin-administration__card-label"
+                            >
+                              {isDesign2
+                                ? getServiceAccountStatusLabel(status)
+                                : account.projectName}
+                            </Label>
+                            <ActionsColumn items={getRowActions(account)} />
+                          </div>
                         </div>
-                      </div>
-                      <Content component="p" className="tenant-admin-administration__name-cell">
-                        <Button
-                          variant="link"
-                          isInline
-                          className="catalog-item-name-link"
-                          onClick={() => setSelectedAccountId(account.id)}
+                        <Content component="p" className="tenant-admin-administration__name-cell">
+                          <Button
+                            variant="link"
+                            isInline
+                            className="catalog-item-name-link"
+                            onClick={() => setSelectedAccountId(account.id)}
+                          >
+                            {account.name}
+                          </Button>
+                        </Content>
+                        <Content
+                          component="p"
+                          className="tenant-admin-administration__meta-cell tenant-admin-administration__card-email"
                         >
-                          {account.name}
-                        </Button>
-                      </Content>
-                      <Content
-                        component="p"
-                        className="tenant-admin-administration__meta-cell tenant-admin-administration__card-email"
-                      >
-                        {account.description || '—'}
-                      </Content>
-                      <CatalogSpecRowsList
-                        rows={[
-                          {
-                            label: 'Keys',
-                            value: String(account.tokenSecretIds.length),
-                          },
-                          {
-                            label: 'Created',
-                            value: formatServiceAccountCreatedAt(account.createdAt),
-                          },
-                        ]}
-                        className="tenant-admin-administration__specs-list"
-                        rowClassName="tenant-admin-administration__spec-row"
-                        labelClassName="tenant-admin-administration__spec-label"
-                        valueClassName="tenant-admin-administration__spec-value"
-                      />
-                    </CardBody>
-                  </Card>
-                ))}
+                          {isDesign2 ? (
+                            <code>{clientId}</code>
+                          ) : (
+                            account.description || '—'
+                          )}
+                        </Content>
+                        <CatalogSpecRowsList
+                          rows={[
+                            isDesign2
+                              ? {
+                                  label: 'Status',
+                                  value: getServiceAccountStatusLabel(status),
+                                }
+                              : {
+                                  label: 'Keys',
+                                  value: String(account.tokenSecretIds.length),
+                                },
+                            {
+                              label: 'Created',
+                              value: formatServiceAccountCreatedAt(account.createdAt),
+                            },
+                          ]}
+                          className="tenant-admin-administration__specs-list"
+                          rowClassName="tenant-admin-administration__spec-row"
+                          labelClassName="tenant-admin-administration__spec-label"
+                          valueClassName="tenant-admin-administration__spec-value"
+                        />
+                      </CardBody>
+                    </Card>
+                  )
+                })}
               </div>
             </>
           ) : (
@@ -448,50 +648,70 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
                 <Thead>
                   <Tr>
                     <Th className="tenant-admin-administration__col-name">Name</Th>
-                    <Th>Project</Th>
-                    <Th>Keys</Th>
+                    {isDesign2 ? <Th>Client ID</Th> : <Th>Project</Th>}
+                    {isDesign2 ? <Th>Status</Th> : <Th>Keys</Th>}
                     <Th>Created</Th>
                     <Th screenReaderText="Actions" />
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {filteredAccounts.map((account) => (
-                    <Tr key={account.id}>
-                      <Td dataLabel="Name" className="tenant-admin-administration__col-name">
-                        <Content
-                          component="p"
-                          className="tenant-admin-administration__primary-cell"
-                        >
-                          <Button
-                            variant="link"
-                            isInline
-                            className="catalog-table-name-link"
-                            onClick={() => setSelectedAccountId(account.id)}
+                  {filteredAccounts.map((account) => {
+                    const status = getServiceAccountStatus(account)
+                    const clientId = buildServiceAccountClientId(tenantSlug, account.name)
+                    return (
+                      <Tr key={account.id}>
+                        <Td dataLabel="Name" className="tenant-admin-administration__col-name">
+                          <Content
+                            component="p"
+                            className="tenant-admin-administration__primary-cell"
                           >
-                            {account.name}
-                          </Button>
-                        </Content>
-                        <Content
-                          component="p"
-                          className="tenant-admin-administration__meta-cell"
-                        >
-                          {account.description || '—'}
-                        </Content>
-                      </Td>
-                      <Td dataLabel="Project">
-                        <Label color="green" isCompact>
-                          {account.projectName}
-                        </Label>
-                      </Td>
-                      <Td dataLabel="Keys">{account.tokenSecretIds.length}</Td>
-                      <Td dataLabel="Created">
-                        {formatServiceAccountCreatedAt(account.createdAt)}
-                      </Td>
-                      <Td isActionCell>
-                        <ActionsColumn items={getRowActions(account)} />
-                      </Td>
-                    </Tr>
-                  ))}
+                            <Button
+                              variant="link"
+                              isInline
+                              className="catalog-table-name-link"
+                              onClick={() => setSelectedAccountId(account.id)}
+                            >
+                              {account.name}
+                            </Button>
+                          </Content>
+                          {!isDesign2 ? (
+                            <Content
+                              component="p"
+                              className="tenant-admin-administration__meta-cell"
+                            >
+                              {account.description || '—'}
+                            </Content>
+                          ) : null}
+                        </Td>
+                        {isDesign2 ? (
+                          <Td dataLabel="Client ID">
+                            <code>{clientId}</code>
+                          </Td>
+                        ) : (
+                          <Td dataLabel="Project">
+                            <Label color="green" isCompact>
+                              {account.projectName}
+                            </Label>
+                          </Td>
+                        )}
+                        {isDesign2 ? (
+                          <Td dataLabel="Status">
+                            <Label color={getServiceAccountStatusColor(status)} isCompact>
+                              {getServiceAccountStatusLabel(status)}
+                            </Label>
+                          </Td>
+                        ) : (
+                          <Td dataLabel="Keys">{account.tokenSecretIds.length}</Td>
+                        )}
+                        <Td dataLabel="Created">
+                          {formatServiceAccountCreatedAt(account.createdAt)}
+                        </Td>
+                        <Td isActionCell>
+                          <ActionsColumn items={getRowActions(account)} />
+                        </Td>
+                      </Tr>
+                    )
+                  })}
                 </Tbody>
               </Table>
             </div>
@@ -499,6 +719,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
         </>
       )}
       {deleteModal}
+      {design2Modals}
     </div>
   )
 }

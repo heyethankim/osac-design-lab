@@ -48,6 +48,8 @@ type TenantCatalogItemDetailsPageProps = {
   onBack: () => void
   onNavigateToProjectsTeams: () => void
   onLaunch?: () => void
+  /** Overrides the primary launch CTA label (e.g. Multi-service catalog → Provision instance). */
+  launchActionLabel?: string
   onEdit?: () => void
   onDuplicate?: () => void
   onTogglePublish?: () => void
@@ -60,6 +62,7 @@ export function TenantCatalogItemDetailsPage({
   onBack,
   onNavigateToProjectsTeams,
   onLaunch,
+  launchActionLabel = LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel,
   onEdit,
   onDuplicate,
   onTogglePublish,
@@ -74,8 +77,12 @@ export function TenantCatalogItemDetailsPage({
         serviceId: item.serviceId,
         templateRefId: item.templateRefId,
         templateName: item.templateName,
+        instanceTypeId: item.instanceTypeId,
         instanceTypeLabel: item.instanceTypeLabel,
+        diskImageId: item.diskImageId,
         diskImageLabel: item.diskImageLabel,
+        hardwareOsMode: item.hardwareOsMode,
+        osImageMode: item.osImageMode,
       })
     : []
   const clusterHighlightRows = isCluster
@@ -116,6 +123,9 @@ export function TenantCatalogItemDetailsPage({
             (row) =>
               row.label !== 'Instance type' &&
               row.label !== 'Size' &&
+              row.label !== 'CPU' &&
+              row.label !== 'RAM' &&
+              row.label !== 'GPU' &&
               row.label !== 'OS image',
           )
         : isCluster
@@ -166,7 +176,7 @@ export function TenantCatalogItemDetailsPage({
         <>
           {onLaunch && !isUnpublished ? (
             <Button variant="primary" icon={<RocketIcon />} onClick={onLaunch}>
-              {LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel}
+              {launchActionLabel}
             </Button>
           ) : null}
           <EntityDetailsActionsDropdown

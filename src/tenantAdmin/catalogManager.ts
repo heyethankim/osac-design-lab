@@ -16,16 +16,21 @@ import {
   getCatalogSpecRowValue,
   resolveCatalogOsImage,
   resolveBaremetalCatalogCardSpecRows,
+  resolveCatalogCardSpecRows,
   resolveCatalogSpecRows,
 } from '../catalog/catalogSpecs'
 import {
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
   LEGACY_CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+  LEGACY_VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID,
+  VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID,
 } from '../catalog/catalogSpecs'
 import {
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   LEGACY_BARE_METAL_GPU_CATALOG_ITEM_ID,
+  MODEL_SERVING_CATALOG_ITEM_ID,
+  VM_GENERAL_PURPOSE_CATALOG_ITEM_ID,
   ensureProviderCatalogDemoItems,
   sortByDemoCatalogOrder,
 } from '../providerSetup/prototypeEntry'
@@ -65,6 +70,11 @@ export type TenantCatalogGovernanceItem = {
     machineTypeId: string
     nodeCount: number
   }>
+  addonOperators?: Array<{
+    operatorId: string
+    mode: 'mandatory' | 'optional-default'
+  }>
+  addonOperatorsMode?: 'locked' | 'editable'
   fieldPolicies?: CatalogFieldPolicy[]
   /** Card/table configuration rows (service-aware). */
   specRows: CatalogSpecRow[]
@@ -112,12 +122,16 @@ export function getTenantCatalogProjectsLinkLabel(projectCount: number): string 
     : TENANT_CATALOG_MANAGER_DEMO.addProjectsLinkLabel
 }
 
-/** Inherited provider offerings shown on the tenant admin catalog demo (2 cards). */
+/** Inherited provider offerings shown on the tenant admin catalog demo. */
 const TENANT_ADMIN_DEMO_PROVIDER_CATALOG_ITEM_IDS = new Set([
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+  VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID,
+  VM_GENERAL_PURPOSE_CATALOG_ITEM_ID,
+  MODEL_SERVING_CATALOG_ITEM_ID,
   LEGACY_BARE_METAL_GPU_CATALOG_ITEM_ID,
   LEGACY_CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+  LEGACY_VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID,
 ])
 
 function isTenantAdminDemoProviderCatalogItem(catalogItemId: string): boolean {
@@ -165,7 +179,7 @@ function mapProviderCatalogToGovernanceItem(
   const specRows =
     serviceId === 'baremetal'
       ? resolveBaremetalCatalogCardSpecRows(draft)
-      : resolveCatalogSpecRows(draft)
+      : resolveCatalogCardSpecRows(draft)
   const networkPolicy = applyTenantNetworkOverrides(
     getCatalogItemNetworkPolicy(draft),
     getTenantNetworkOverrides(organization.slug, draft.catalogItemId),
@@ -195,6 +209,8 @@ function mapProviderCatalogToGovernanceItem(
     hostTypeLabel: draft.hostTypeLabel,
     clusterNodeTopologyMode: draft.clusterNodeTopologyMode,
     clusterTopology: draft.clusterTopology,
+    addonOperators: draft.addonOperators,
+    addonOperatorsMode: draft.addonOperatorsMode,
     fieldPolicies: draft.fieldPolicies,
     specRows,
     categoryLabel: specRows.map((row) => row.value).join(' · '),
@@ -370,6 +386,8 @@ export function getTenantCatalogItemDetailSpecRows(
       hostTypeLabel: item.hostTypeLabel,
       clusterNodeTopologyMode: item.clusterNodeTopologyMode,
       clusterTopology: item.clusterTopology,
+      addonOperators: item.addonOperators,
+      addonOperatorsMode: item.addonOperatorsMode,
     },
     { includeDetails: true },
   )

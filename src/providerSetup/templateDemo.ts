@@ -305,7 +305,7 @@ export const CATALOG_SERVICE_OFFERINGS: CatalogServiceOffering[] = [
   {
     id: 'models',
     title: 'Models as a Service',
-    shortLabel: 'MaaS',
+    shortLabel: 'Models',
     description:
       'Create catalog items from curated AI model endpoints for tenants to request.',
   },
@@ -321,7 +321,7 @@ export const CATALOG_SERVICE_OFFERINGS: CatalogServiceOffering[] = [
 export const CATALOG_SERVICE_LABELS: Record<CatalogServiceId, string> = {
   baremetal: 'Bare Metal',
   cluster: 'Cluster',
-  models: 'MaaS',
+  models: 'Models',
   'virtual-machine': 'Virtual Machine',
 }
 

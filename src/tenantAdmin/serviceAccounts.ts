@@ -29,7 +29,54 @@ export const TENANT_SERVICE_ACCOUNTS_DEMO = {
   bindRoleLabel: 'Grant role',
   keysSectionHelp: 'Keys authenticate as this account.',
   rolesSectionHelp: 'Grant a tenant role so this account can access resources.',
+  credentialsSectionHelp:
+    'Each service account has one client ID and client secret for authentication.',
+  viewClientIdLabel: 'View Client ID',
+  viewCredentialsLabel: 'View Credentials',
+  regenerateSecretLabel: 'Regenerate Secret',
+  assignRolesLabel: 'Assign Roles',
+  noPermissionsOnCreateHelp:
+    'This service account will be created with no permissions. Assign roles in the Permissions tab after creation to grant access.',
+  roleGrantsZeroAccessHelp:
+    'A service account with no assigned roles cannot perform any actions. You can grant roles now or assign them later under Permissions.',
+  nameImmutableHelp: 'Service account name cannot be modified after creation.',
 } as const
+
+/** Roles that can be granted to service accounts (Tenant Viewer/Operator are not real roles). */
+export const SERVICE_ACCOUNT_ASSIGNABLE_ROLES = [
+  {
+    id: 'tenant-administrator' as const,
+    label: 'Tenant Admin',
+    description: 'Full administrative access to all resources within a tenant.',
+  },
+  {
+    id: 'tenant-user' as const,
+    label: 'Tenant User',
+    description: 'Standard user access within a tenant.',
+  },
+] as const
+
+export type ServiceAccountAssignableRoleId =
+  (typeof SERVICE_ACCOUNT_ASSIGNABLE_ROLES)[number]['id']
+
+/** Design 2 display labels for role grants. */
+export const SERVICE_ACCOUNT_DESIGN2_ROLE_LABELS: Record<AssignableTenantRoleId, string> = {
+  'tenant-administrator': 'Tenant Admin',
+  'tenant-user': 'Tenant User',
+  // Legacy bindings only — not offered in Assign Roles.
+  'tenant-reader': 'Tenant Reader',
+}
+
+export function getServiceAccountAssignableRole(
+  roleId: ServiceAccountAssignableRoleId,
+): (typeof SERVICE_ACCOUNT_ASSIGNABLE_ROLES)[number] {
+  return (
+    SERVICE_ACCOUNT_ASSIGNABLE_ROLES.find((role) => role.id === roleId) ??
+    SERVICE_ACCOUNT_ASSIGNABLE_ROLES[0]
+  )
+}
+
+export type ServiceAccountStatus = 'active' | 'suspended' | 'deleting'
 
 export type ServiceAccountRoleBinding = {
   id: string
@@ -41,7 +88,7 @@ export type TenantServiceAccount = {
   id: string
   name: string
   description: string
-  /** Always project-scoped (OCP/K8s namespace equivalent). */
+  /** Always project-scoped (OCP/K8s namespace equivalent). Design 2 keeps root only. */
   projectId: string
   projectName: string
   createdAt: string
@@ -50,7 +97,11 @@ export type TenantServiceAccount = {
   tokenSecretIds: string[]
   /** RoleBindings granting this SA access (managed separately from the identity). */
   roleBindings: ServiceAccountRoleBinding[]
+  /** Lifecycle status (Design 2). Missing values are treated as active. */
+  status?: ServiceAccountStatus
 }
+
+export type ServiceAccountsDesignVariant = '1' | '2'
 
 export type ServiceAccountProjectFilter = 'all' | string
 
@@ -86,6 +137,10 @@ function isRoleBinding(value: unknown): value is ServiceAccountRoleBinding {
   )
 }
 
+function isServiceAccountStatus(value: unknown): value is ServiceAccountStatus {
+  return value === 'active' || value === 'suspended' || value === 'deleting'
+}
+
 function isTenantServiceAccount(value: unknown): value is TenantServiceAccount {
   if (!value || typeof value !== 'object') {
     return false
@@ -104,8 +159,44 @@ function isTenantServiceAccount(value: unknown): value is TenantServiceAccount {
     Array.isArray(entry.tokenSecretIds) &&
     entry.tokenSecretIds.every((id) => typeof id === 'string') &&
     Array.isArray(entry.roleBindings) &&
-    entry.roleBindings.every(isRoleBinding)
+    entry.roleBindings.every(isRoleBinding) &&
+    (entry.status === undefined || isServiceAccountStatus(entry.status))
   )
+}
+
+export function getServiceAccountStatus(account: TenantServiceAccount): ServiceAccountStatus {
+  return account.status ?? 'active'
+}
+
+export function getServiceAccountStatusLabel(status: ServiceAccountStatus): string {
+  switch (status) {
+    case 'suspended':
+      return 'Suspended'
+    case 'deleting':
+      return 'Deleting'
+    case 'active':
+    default:
+      return 'Active'
+  }
+}
+
+export function getServiceAccountStatusColor(
+  status: ServiceAccountStatus,
+): 'green' | 'orange' | 'grey' {
+  switch (status) {
+    case 'suspended':
+      return 'orange'
+    case 'deleting':
+      return 'grey'
+    case 'active':
+    default:
+      return 'green'
+  }
+}
+
+/** Keycloak-style public client identifier (Design 2). */
+export function buildServiceAccountClientId(tenantSlug: string, accountName: string): string {
+  return `sa-${tenantSlug}-${accountName.trim().toLowerCase()}`
 }
 
 function readStoredAccounts(tenantSlug: string): TenantServiceAccount[] | null {
@@ -225,6 +316,7 @@ function buildDemoServiceAccounts(tenantSlug: string): TenantServiceAccount[] {
           createdAt: new Date(now - 1000 * 60 * 60 * 24 * 12).toISOString(),
         },
       ],
+      status: 'active',
     },
     {
       id: DEMO_OBSERVABILITY_SERVICE_ACCOUNT_ID,
@@ -237,11 +329,12 @@ function buildDemoServiceAccounts(tenantSlug: string): TenantServiceAccount[] {
       tokenSecretIds: [DEMO_OBSERVABILITY_TOKEN_SECRET_ID],
       roleBindings: [
         {
-          id: 'binding-obs-tenant-reader',
-          roleId: 'tenant-reader',
+          id: 'binding-obs-tenant-user',
+          roleId: 'tenant-user',
           createdAt: new Date(now - 1000 * 60 * 60 * 24 * 5).toISOString(),
         },
       ],
+      status: 'active',
     },
   ]
 }
@@ -308,6 +401,10 @@ export type CreateTenantServiceAccountInput = {
   projectId: string
   projectName: string
   labels?: string[]
+  roleIds?: readonly AssignableTenantRoleId[]
+  status?: ServiceAccountStatus
+  /** Design 2: issue the single client secret at create time. */
+  issueCredential?: boolean
 }
 
 export function createTenantServiceAccount(
@@ -323,20 +420,34 @@ export function createTenantServiceAccount(
     return null
   }
 
+  const createdAt = new Date().toISOString()
+  const roleBindings: ServiceAccountRoleBinding[] = (input.roleIds ?? []).map((roleId, index) => ({
+    id: `binding-${Date.now().toString(36)}-${index}`,
+    roleId,
+    createdAt,
+  }))
+
   const account: TenantServiceAccount = {
     id: `sa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     name,
     description: input.description.trim(),
     projectId: input.projectId,
     projectName: input.projectName,
-    createdAt: new Date().toISOString(),
+    createdAt,
     labels: (input.labels ?? []).map((label) => label.trim()).filter(Boolean),
     tokenSecretIds: [],
-    roleBindings: [],
+    roleBindings,
+    status: input.status ?? 'active',
   }
 
   const next = sortServiceAccounts([...listTenantServiceAccounts(tenantSlug), account])
   writeStoredAccounts(tenantSlug, next)
+
+  if (input.issueCredential) {
+    const withCredential = createServiceAccountToken(tenantSlug, account.id)
+    return withCredential?.account ?? account
+  }
+
   return account
 }
 
@@ -346,6 +457,9 @@ export type UpdateTenantServiceAccountInput = {
   projectId: string
   projectName: string
   labels?: string[]
+  /** When true, keep the existing name (Design 2 immutable name). */
+  preserveName?: boolean
+  roleIds?: readonly AssignableTenantRoleId[]
 }
 
 export function updateTenantServiceAccount(
@@ -359,16 +473,30 @@ export function updateTenantServiceAccount(
     return null
   }
 
-  const name = input.name.trim().toLowerCase()
+  const existing = current[index]!
+  const name = input.preserveName ? existing.name : input.name.trim().toLowerCase()
   if (
     validateServiceAccountName(name) ||
     !input.projectId ||
-    isServiceAccountNameTaken(tenantSlug, name, input.projectId, id)
+    (!input.preserveName && isServiceAccountNameTaken(tenantSlug, name, input.projectId, id))
   ) {
     return null
   }
 
-  const existing = current[index]!
+  const roleBindings =
+    input.roleIds !== undefined
+      ? input.roleIds.map((roleId, roleIndex) => {
+          const existingBinding = existing.roleBindings.find((binding) => binding.roleId === roleId)
+          return (
+            existingBinding ?? {
+              id: `binding-${Date.now().toString(36)}-${roleIndex}`,
+              roleId,
+              createdAt: new Date().toISOString(),
+            }
+          )
+        })
+      : existing.roleBindings
+
   const updated: TenantServiceAccount = {
     ...existing,
     name,
@@ -379,6 +507,7 @@ export function updateTenantServiceAccount(
       input.labels !== undefined
         ? input.labels.map((label) => label.trim()).filter(Boolean)
         : existing.labels,
+    roleBindings,
   }
   const next = [...current]
   next[index] = updated
@@ -398,6 +527,19 @@ export function deleteTenantServiceAccount(tenantSlug: string, id: string): Tena
   const next = listTenantServiceAccounts(tenantSlug).filter((entry) => entry.id !== id)
   writeStoredAccounts(tenantSlug, next)
   return next
+}
+
+/** Design 2: mark deleting instead of hard-removing (cleanup continues in the background). */
+export function markTenantServiceAccountDeleting(
+  tenantSlug: string,
+  id: string,
+): TenantServiceAccount[] {
+  const current = listTenantServiceAccounts(tenantSlug)
+  const next = current.map((account) =>
+    account.id === id ? { ...account, status: 'deleting' as const } : account,
+  )
+  writeStoredAccounts(tenantSlug, sortServiceAccounts(next))
+  return listTenantServiceAccounts(tenantSlug)
 }
 
 function replaceAccount(
@@ -436,6 +578,79 @@ export function createServiceAccountToken(
   })
 
   return { account: updated, secret, token }
+}
+
+/**
+ * Design 2 single-credential model: revoke the active secret and issue a new one
+ * (ServiceAccounts/RegenerateSecret).
+ */
+export function regenerateServiceAccountSecret(
+  tenantSlug: string,
+  accountId: string,
+): {
+  account: TenantServiceAccount
+  secret: TenantSecret
+  clientId: string
+  clientSecret: string
+} | null {
+  const account = getTenantServiceAccountById(tenantSlug, accountId)
+  if (!account || getServiceAccountStatus(account) === 'deleting') {
+    return null
+  }
+
+  for (const secretId of account.tokenSecretIds) {
+    deleteTenantSecret(tenantSlug, secretId)
+  }
+
+  const clientSecret = createSecretToken()
+  const createdAt = new Date().toISOString()
+  const secret = buildTokenSecret({
+    id: `sa-token-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    accountName: account.name,
+    projectId: account.projectId,
+    token: clientSecret,
+    createdAt,
+  })
+  addTenantSecret(tenantSlug, secret)
+
+  const updated = replaceAccount(tenantSlug, {
+    ...account,
+    tokenSecretIds: [secret.id],
+  })
+
+  return {
+    account: updated,
+    secret,
+    clientId: buildServiceAccountClientId(tenantSlug, account.name),
+    clientSecret,
+  }
+}
+
+/** Ensure Design 2 accounts have exactly one credential secret. */
+export function ensureServiceAccountSingleCredential(
+  tenantSlug: string,
+  accountId: string,
+): TenantServiceAccount | null {
+  const account = getTenantServiceAccountById(tenantSlug, accountId)
+  if (!account) {
+    return null
+  }
+  if (account.tokenSecretIds.length === 1) {
+    return account
+  }
+  if (account.tokenSecretIds.length === 0) {
+    const created = createServiceAccountToken(tenantSlug, accountId)
+    return created?.account ?? null
+  }
+
+  const [keepId, ...extras] = account.tokenSecretIds
+  for (const secretId of extras) {
+    deleteTenantSecret(tenantSlug, secretId)
+  }
+  return replaceAccount(tenantSlug, {
+    ...account,
+    tokenSecretIds: keepId ? [keepId] : [],
+  })
 }
 
 export function deleteServiceAccountToken(
@@ -559,7 +774,11 @@ export function formatServiceAccountCreatedAtLong(value: string): string {
 }
 
 export function getServiceAccountRoleLabel(roleId: AssignableTenantRoleId): string {
-  return getAssignableTenantRole(roleId).label
+  return (
+    SERVICE_ACCOUNT_ASSIGNABLE_ROLES.find((role) => role.id === roleId)?.label ??
+    SERVICE_ACCOUNT_DESIGN2_ROLE_LABELS[roleId] ??
+    getAssignableTenantRole(roleId).label
+  )
 }
 
 /** Synthetic principal id for service account role assignment rows. */

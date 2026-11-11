@@ -305,6 +305,16 @@ export type ProviderCatalogDraft = {
     machineTypeId: string
     nodeCount: number
   }>
+  /** Cluster as a Service add-on operators selected for the offering. */
+  addonOperators?: Array<{
+    operatorId: string
+    mode: 'mandatory' | 'optional-default'
+  }>
+  /**
+   * Cluster as a Service only. When `editable`, tenants may change add-on operators at launch.
+   * Defaults to locked when omitted.
+   */
+  addonOperatorsMode?: 'locked' | 'editable'
   /** Locked vs exposed field policies for launch. */
   fieldPolicies?: CatalogFieldPolicy[]
 }
@@ -959,6 +969,8 @@ export function patchProviderCatalogItem(
       | 'clusterTopology'
       | 'hardwareOsMode'
       | 'osImageMode'
+      | 'addonOperators'
+      | 'addonOperatorsMode'
       | 'rateCard'
     >
   >,

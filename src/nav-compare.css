@@ -109,10 +109,17 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.5rem 0.5rem 0.75rem;
+  /* Fixed height so Cloud Extensions starts at the same Y across personas */
+  flex: 0 0 4rem;
+  height: 4rem;
+  min-height: 4rem;
+  max-height: 4rem;
+  padding: 0 0.5rem;
+  box-sizing: border-box;
+  overflow: hidden;
   background: transparent;
   border-bottom: none;
-  margin-bottom: 0.15rem;
+  margin-bottom: 0;
 }
 
 .nav-compare__toggle {
@@ -136,11 +143,70 @@
   height: 1.125rem;
 }
 
+.nav-compare__brand {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  height: 3.25rem;
+  min-width: 0;
+  max-width: calc(100% - 3rem);
+}
+
+.nav-compare__brand--redhat {
+  gap: 0.4rem;
+}
+
+.nav-compare__brand-logo {
+  display: block;
+  width: 1.5rem;
+  height: auto;
+  flex-shrink: 0;
+}
+
+.nav-compare__brand-wordmark {
+  color: var(--nav-text, #151515);
+  font-family: var(--pf-t--global--font--family--heading);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.nav-compare__brand--northsummit .northsummit-masthead-brand {
+  max-height: 3.25rem;
+}
+
+.nav-compare__brand--northsummit .northsummit-masthead-brand__svg {
+  height: 3.25rem;
+  max-width: min(100%, 16.5rem);
+}
+
 .nav-compare__sidebar {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   background: transparent;
   overflow: visible;
+}
+
+.nav-compare__product.osac-shell-sidebar-product {
+  /* Exact same title + divider band in every persona column */
+  flex: 0 0 auto;
+  gap: var(--pf-t--global--spacer--lg);
+  padding-block-start: var(--pf-t--global--spacer--md);
+  padding-block-end: var(--pf-t--global--spacer--sm);
+  padding-inline: 0.85rem 0.5rem;
+  box-sizing: border-box;
+}
+
+.nav-compare__product .osac-shell-sidebar-product__title {
+  font-size: 1.25rem;
+  line-height: 1.3;
+  height: 1.625rem;
 }
 
 .nav-compare__sidebar .pf-v6-c-nav,

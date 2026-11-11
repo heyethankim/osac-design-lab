@@ -233,12 +233,17 @@ export const PROVIDER_SERVICE_OFFERINGS: ProviderServiceOffering[] = [
   },
 ]
 
-export const DEFAULT_PROVIDER_SERVICE_SELECTION: ProviderServiceId[] = ['baremetal', 'cluster']
+export const DEFAULT_PROVIDER_SERVICE_SELECTION: ProviderServiceId[] = [
+  'baremetal',
+  'cluster',
+  'models',
+  'virtual-machine',
+]
 
 export const PROVIDER_SERVICE_CHIP_LABELS: Record<ProviderServiceId, string> = {
   baremetal: 'Bare Metal',
   cluster: 'Cluster',
-  models: 'MaaS',
+  models: 'Models',
   'virtual-machine': 'Virtual Machine',
 }
 

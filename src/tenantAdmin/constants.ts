@@ -6,9 +6,11 @@ export type TenantAdminNavId =
   | 'services-models'
   | 'services-virtual-machines'
   | 'projects-teams'
+  | 'storage-volumes'
   | 'administration-roles'
   | 'administration-service-accounts'
   | 'administration-billing'
+  | 'administration-identity-providers'
   | 'networking-virtual-networks'
   | 'networking-subnets'
   | 'networking-security-groups'
@@ -42,6 +44,11 @@ export const TENANT_EXTERNAL_IPS_PAGE_LABEL = 'External IPs'
 /** Shown on tenant external IP pool surfaces — pools are provisioned by the provider, not tenants. */
 export const TENANT_EXTERNAL_IP_POOL_MANAGED_BY_LABEL = 'Provider administrator'
 
+export const TENANT_ADMIN_STORAGE_NAV_ITEMS: ReadonlyArray<{
+  id: TenantAdminNavId
+  label: string
+}> = [{ id: 'storage-volumes', label: 'Volumes' }]
+
 export const TENANT_ADMIN_NETWORKING_NAV_ITEMS: ReadonlyArray<{
   id: TenantAdminNavId
   label: string
@@ -54,9 +61,10 @@ export const TENANT_ADMIN_ADMINISTRATION_NAV_ITEMS: ReadonlyArray<{
   id: TenantAdminNavId
   label: string
 }> = [
-  { id: 'administration-roles', label: 'Roles' },
+  { id: 'administration-roles', label: 'Users' },
   { id: 'administration-service-accounts', label: 'Service accounts' },
   { id: 'administration-billing', label: 'Billing' },
+  { id: 'administration-identity-providers', label: 'Identity provider' },
 ]
 
 export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
@@ -68,6 +76,11 @@ export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
     children: TENANT_ADMIN_SERVICES_NAV_ITEMS,
   },
   { id: 'projects-teams', label: 'Projects' },
+  {
+    id: 'storage',
+    label: 'Storage',
+    children: TENANT_ADMIN_STORAGE_NAV_ITEMS,
+  },
   {
     id: 'networking',
     label: 'Networking',
@@ -97,6 +110,10 @@ export function isNetworkingNavId(navId: string): boolean {
 
 export function isServicesNavId(navId: string): boolean {
   return navId.startsWith('services-')
+}
+
+export function isStorageNavId(navId: string): boolean {
+  return navId.startsWith('storage-')
 }
 
 export function isAdministrationNavId(navId: string): boolean {

@@ -351,6 +351,92 @@
   gap: var(--pf-t--global--spacer--sm);
 }
 
+.tenant-admin-service-accounts__create-permissions-alert {
+  margin: 0;
+}
+
+.tenant-admin-service-accounts__client-id-preview.pf-v6-c-content--p {
+  margin: 0;
+}
+
+.tenant-admin-service-accounts__credentials-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.tenant-admin-service-accounts__credentials-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.tenant-admin-service-accounts__secret-row {
+  width: 100%;
+}
+
+.tenant-admin-service-accounts__role-grants-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+.tenant-admin-service-accounts__role-grants-lede.pf-v6-c-content--p {
+  margin: 0;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.tenant-admin-service-accounts__role-cards.provider-setup-template__card-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.tenant-admin-service-accounts__role-card.provider-setup-template__select-card {
+  height: 100%;
+  text-align: start;
+}
+
+.tenant-admin-service-accounts__role-card .provider-setup-template__select-card-title.pf-v6-c-title {
+  margin-block-end: var(--pf-t--global--spacer--xs);
+  padding-inline-end: 4.5rem;
+}
+
+.tenant-admin-service-accounts__role-card .provider-setup-template__select-card-detail.pf-v6-c-content--p {
+  white-space: normal;
+}
+
+.tenant-admin-service-accounts__zero-access-alert {
+  margin: 0;
+}
+
+.tenant-admin-service-accounts__role-grants-stack > .pf-v6-c-form__group {
+  margin-block-start: 0;
+}
+
+@media (max-width: 768px) {
+  .tenant-admin-service-accounts__role-cards.provider-setup-template__card-group {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tenant-admin-service-accounts__name-readonly {
+  display: block;
+}
+
+.tenant-admin-service-accounts__client-id-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+.tenant-admin-service-accounts__client-id-row .pf-v6-c-clipboard-copy {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
 .tenant-admin-service-accounts__credentials {
   display: flex;
   flex-direction: column;
@@ -1743,7 +1829,18 @@
   margin-block-end: var(--pf-t--global--spacer--md);
 }
 
-.tenant-admin-catalog-manager__create.pf-v6-c-button {
+.tenant-admin-catalog-manager__service-tabs.pf-v6-c-tabs {
+  margin-block-end: var(--pf-t--global--spacer--md);
+}
+
+.tenant-admin-catalog-manager__tab-count {
+  margin-inline-start: var(--pf-t--global--spacer--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  font-weight: var(--pf-t--global--font--weight--body--regular);
+}
+
+.tenant-admin-catalog-manager__create.pf-v6-c-button,
+.tenant-admin-catalog-manager__create.pf-v6-c-menu-toggle {
   white-space: nowrap;
 }
 
