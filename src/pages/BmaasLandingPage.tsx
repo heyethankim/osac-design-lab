@@ -151,7 +151,7 @@ const LANDING_TOPICS: TopicCard[] = [
     id: TOPIC_CATALOG_ITEM_CREATION,
     title: 'Catalog item creation flow',
     description: 'Compare alternative designs for creating a catalog item.',
-    status: 'In review',
+    status: 'In progress',
     isGoldPattern: true,
     authors: 'Ethan Kim',
     updated: BMAAS_LANDING_LAST_UPDATED,
