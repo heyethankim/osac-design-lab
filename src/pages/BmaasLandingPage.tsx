@@ -19,9 +19,7 @@ import {
 import { css } from '@patternfly/react-styles'
 import alignmentStyles from '@patternfly/react-styles/css/utilities/Alignment/alignment'
 import { BlueprintIcon } from '@patternfly/react-icons/dist/esm/icons/blueprint-icon'
-import { OutlinedClockIcon } from '@patternfly/react-icons/dist/esm/icons/outlined-clock-icon'
 import { SearchIcon } from '@patternfly/react-icons/dist/esm/icons/search-icon'
-import { UserIcon } from '@patternfly/react-icons/dist/esm/icons/user-icon'
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -89,6 +87,8 @@ type TopicCard = {
     key: string
     href: string
   }
+  /** Shown above author attribution on topic cards. */
+  fixVersion?: string
   authors: string
   updated: string
   personas: string[]
@@ -102,6 +102,7 @@ const LANDING_TOPICS: TopicCard[] = [
     description:
       'Compare Tenant Admin catalog designs for offerings across bare metal, clusters, virtual machines, and models.',
     status: 'In progress',
+    fixVersion: '0.4',
     authors: 'Ethan Kim',
     updated: BMAAS_LANDING_LAST_UPDATED,
     personas: ['Tenant Admin'],
@@ -117,6 +118,7 @@ const LANDING_TOPICS: TopicCard[] = [
       key: 'OSAC-6161',
       href: 'https://redhat.atlassian.net/browse/OSAC-6161',
     },
+    fixVersion: '0.4',
     authors: 'Ethan Kim',
     updated: BMAAS_LANDING_LAST_UPDATED,
     personas: ['Provider Admin'],
@@ -132,6 +134,7 @@ const LANDING_TOPICS: TopicCard[] = [
       key: 'OSAC-5149',
       href: 'https://redhat.atlassian.net/browse/OSAC-5149',
     },
+    fixVersion: '0.4',
     authors: 'Ethan Kim',
     updated: BMAAS_LANDING_LAST_UPDATED,
     personas: ['Tenant Admin'],
@@ -144,6 +147,7 @@ const LANDING_TOPICS: TopicCard[] = [
       'Side-by-side navigation by persona for Cloud Extensions (previously OSAC). Pages are read-only for the dev preview.',
     status: 'In review',
     isGoldPattern: true,
+    fixVersion: '0.4',
     authors: 'Ethan Kim',
     updated: BMAAS_LANDING_LAST_UPDATED,
     personas: ['Provider Admin', 'Tenant Admin', 'Tenant User', 'IdP Manager'],
@@ -168,6 +172,7 @@ const LANDING_TOPICS: TopicCard[] = [
       'Compare wizard content width: Design 1 uses the previous full width; Design 2 uses the new max/min width.',
     status: 'In review',
     isGoldPattern: true,
+    fixVersion: '0.4',
     authors: 'Ethan Kim',
     updated: BMAAS_LANDING_LAST_UPDATED,
     personas: ['Provider Admin', 'Tenant Admin', 'Tenant User', 'IdP Manager'],
@@ -180,6 +185,7 @@ function topicSearchHaystack(topic: TopicCard): string {
     topic.title,
     topic.description,
     topic.status,
+    topic.fixVersion ? `fix version ${topic.fixVersion}` : '',
     topic.authors,
     topic.updated,
     topic.jira?.key,
@@ -252,6 +258,7 @@ function TopicDesignCard({
   status,
   isGoldPattern = false,
   jira,
+  fixVersion,
   authors,
   updated,
   personas,
@@ -315,16 +322,15 @@ function TopicDesignCard({
           {description}
         </Content>
         <DesignLinks title={title} designs={designs} />
-        <ul className="bmaas-landing-topic-card__attribution">
-          <li>
-            <UserIcon aria-hidden />
-            <span>By {authors}</span>
-          </li>
-          <li>
-            <OutlinedClockIcon aria-hidden />
-            <span>{updated}</span>
-          </li>
-        </ul>
+        <p className="bmaas-landing-topic-card__attribution">
+          {[
+            fixVersion ? `Fix version ${fixVersion}` : null,
+            authors,
+            updated,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
         <LabelGroup className="bmaas-landing-topic-card__personas" numLabels={4}>
           {personas.map((persona) => (
             <Label key={persona} color="grey">

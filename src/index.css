@@ -439,20 +439,11 @@ select.pf-v6-c-form-control {
 }
 
 .bmaas-landing-topic-card__attribution {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pf-t--global--spacer--sm);
   margin: 0;
   padding: 0;
-  list-style: none;
   color: var(--pf-t--global--text--color--subtle);
   font-size: var(--pf-t--global--font--size--body--sm);
-}
-
-.bmaas-landing-topic-card__attribution li {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pf-t--global--spacer--sm);
+  line-height: var(--pf-t--global--font--line-height--body);
 }
 
 .bmaas-landing-topic-card__personas {
