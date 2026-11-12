@@ -3,7 +3,6 @@ import { ArrowRightIcon } from '@patternfly/react-icons/dist/esm/icons/arrow-rig
 import { RhUiRobotIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-robot-icon'
 import {
   Alert,
-  Content,
   DescriptionList,
   DescriptionListDescription,
   DescriptionListGroup,
@@ -16,6 +15,7 @@ import {
   HelperText,
   HelperTextItem,
   TextArea,
+  TextInput,
 } from '@patternfly/react-core'
 import { KubernetesResourceNameField } from '../shared/KubernetesResourceNameHelper'
 import {
@@ -210,7 +210,7 @@ export function CreateServiceAccountWizard({
               <Alert
                 variant="info"
                 isInline
-                title="No permissions on create"
+                title="No access on create"
                 className="tenant-admin-service-accounts__create-permissions-alert"
               >
                 {TENANT_SERVICE_ACCOUNTS_DEMO.noPermissionsOnCreateHelp}
@@ -238,18 +238,20 @@ export function CreateServiceAccountWizard({
               ) : null}
             </FormGroup>
             {isDesign2 ? (
-              <FormGroup label="Client ID preview" fieldId="create-service-account-client-id">
-                <Content
-                  component="p"
-                  className="tenant-admin-service-accounts__client-id-preview"
+              <FormGroup label="Client ID" fieldId="create-service-account-client-id">
+                <TextInput
                   id="create-service-account-client-id"
-                >
-                  <code>{clientIdPreview}</code>
-                </Content>
+                  className="tenant-admin-service-accounts__client-id-preview"
+                  value={clientIdPreview}
+                  readOnly
+                  readOnlyVariant="default"
+                  aria-readonly="true"
+                  aria-label="Generated client ID"
+                />
                 <FormHelperText>
                   <HelperText>
                     <HelperTextItem>
-                      Generated as <code>sa-&lt;tenant-id&gt;-&lt;name&gt;</code>.
+                      Generated automatically as sa-&lt;tenant-id&gt;-&lt;name&gt;.
                     </HelperTextItem>
                   </HelperText>
                 </FormHelperText>
@@ -309,15 +311,17 @@ export function CreateServiceAccountWizard({
         <DescriptionListGroup>
           <DescriptionListTerm>Name</DescriptionListTerm>
           <DescriptionListDescription>
-            <code>{form.name.trim().toLowerCase() || '—'}</code>
+            {isDesign2 ? (
+              form.name.trim().toLowerCase() || '—'
+            ) : (
+              <code>{form.name.trim().toLowerCase() || '—'}</code>
+            )}
           </DescriptionListDescription>
         </DescriptionListGroup>
         {isDesign2 ? (
           <DescriptionListGroup>
             <DescriptionListTerm>Client ID</DescriptionListTerm>
-            <DescriptionListDescription>
-              <code>{clientIdPreview}</code>
-            </DescriptionListDescription>
+            <DescriptionListDescription>{clientIdPreview}</DescriptionListDescription>
           </DescriptionListGroup>
         ) : (
           <DescriptionListGroup>

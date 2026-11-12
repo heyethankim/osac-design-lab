@@ -18,22 +18,25 @@ import { BindServiceAccountRoleModal } from './BindServiceAccountRoleModal'
 import { ServiceAccountCredentialsPanel } from './ServiceAccountCredentialsPanel'
 import { ServiceAccountRegenerateSecretModal } from './ServiceAccountRegenerateSecretModal'
 import { ServiceAccountTokenRevealModal } from './ServiceAccountTokenRevealModal'
-import { getAssignableTenantRole, type AssignableTenantRoleId } from '../../tenantAdmin/administrators'
+import { getAssignableTenantRole } from '../../tenantAdmin/administrators'
 import {
   bindServiceAccountRole,
   createServiceAccountToken,
   deleteServiceAccountToken,
   ensureServiceAccountSingleCredential,
   formatServiceAccountCreatedAtLong,
+  getServiceAccountAssignableRole,
   getServiceAccountStatus,
   getServiceAccountStatusColor,
   getServiceAccountStatusLabel,
   getServiceAccountTokenValue,
+  listServiceAccountAssignableRoleBindings,
   listServiceAccountTokenSecrets,
   regenerateServiceAccountSecret,
   SERVICE_ACCOUNT_DESIGN2_ROLE_LABELS,
   TENANT_SERVICE_ACCOUNTS_DEMO,
   unbindServiceAccountRole,
+  type ServiceAccountAssignableRoleId,
   type ServiceAccountsDesignVariant,
   type TenantServiceAccount,
 } from '../../tenantAdmin/serviceAccounts'
@@ -51,8 +54,6 @@ type ServiceAccountDetailsPageProps = {
   /** Design 2: open focused on Permissions (e.g. Assign Roles from credentials). */
   focusPermissions?: boolean
   onFocusPermissionsConsumed?: () => void
-  /** Design 2: open credentials/regenerate after create. */
-  openCredentialsOnMount?: boolean
 }
 
 export function ServiceAccountDetailsPage({
@@ -65,7 +66,6 @@ export function ServiceAccountDetailsPage({
   designVariant = '1',
   focusPermissions = false,
   onFocusPermissionsConsumed,
-  openCredentialsOnMount = false,
 }: ServiceAccountDetailsPageProps) {
   const isDesign2 = designVariant === '2'
   const status = getServiceAccountStatus(account)
@@ -97,12 +97,6 @@ export function ServiceAccountDetailsPage({
     setBindRoleAccount(account)
     onFocusPermissionsConsumed?.()
   }, [account, focusPermissions, onFocusPermissionsConsumed])
-
-  useEffect(() => {
-    if (openCredentialsOnMount && isDesign2) {
-      setIsRegenerateOpen(false)
-    }
-  }, [isDesign2, openCredentialsOnMount])
 
   const tokenSecrets = useMemo(
     () => listServiceAccountTokenSecrets(tenantSlug, account),
@@ -143,7 +137,7 @@ export function ServiceAccountDetailsPage({
     })
   }
 
-  const handleBindRole = (roleId: AssignableTenantRoleId) => {
+  const handleBindRole = (roleId: ServiceAccountAssignableRoleId) => {
     const updated = bindServiceAccountRole(tenantSlug, account.id, roleId)
     if (updated) {
       onAccountChange(updated)
@@ -157,8 +151,13 @@ export function ServiceAccountDetailsPage({
     }
   }
 
-  const roleLabel = (roleId: AssignableTenantRoleId) =>
-    isDesign2 ? SERVICE_ACCOUNT_DESIGN2_ROLE_LABELS[roleId] : getAssignableTenantRole(roleId).label
+  const visibleRoleBindings = isDesign2
+    ? listServiceAccountAssignableRoleBindings(account)
+    : account.roleBindings
+  const roleLabel = (roleId: ServiceAccountAssignableRoleId) =>
+    isDesign2
+      ? SERVICE_ACCOUNT_DESIGN2_ROLE_LABELS[roleId]
+      : getServiceAccountAssignableRole(roleId).label
 
   return (
     <>
@@ -431,7 +430,7 @@ export function ServiceAccountDetailsPage({
                 <Content component="p" className="tenant-admin-service-accounts__section-help">
                   {TENANT_SERVICE_ACCOUNTS_DEMO.rolesSectionHelp}
                 </Content>
-                {account.roleBindings.length === 0 ? (
+                {visibleRoleBindings.length === 0 ? (
                   <Content component="p" className="tenant-admin-service-accounts__empty-section">
                     No roles granted yet.
                   </Content>
@@ -440,12 +439,13 @@ export function ServiceAccountDetailsPage({
                     className="entity-details-page__node-set-list"
                     aria-label="Service account permissions"
                   >
-                    {account.roleBindings.map((binding) => {
-                      const role = getAssignableTenantRole(binding.roleId)
+                    {visibleRoleBindings.map((binding) => {
+                      const role = getServiceAccountAssignableRole(binding.roleId)
+                      const roleColor = getAssignableTenantRole(binding.roleId).color
                       return (
                         <li key={binding.id} className="entity-details-page__node-set-item">
                           <div className="entity-details-page__node-set-item-header">
-                            <Label color={role.color} isCompact>
+                            <Label color={roleColor} isCompact>
                               {roleLabel(binding.roleId)}
                             </Label>
                             {!isDeleting ? (

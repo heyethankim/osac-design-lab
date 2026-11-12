@@ -12,9 +12,9 @@ import {
   ModalHeader,
   ModalVariant,
 } from '@patternfly/react-core'
-import { type AssignableTenantRoleId } from '../../tenantAdmin/administrators'
 import {
   getServiceAccountAssignableRole,
+  listServiceAccountAssignableRoleBindings,
   SERVICE_ACCOUNT_ASSIGNABLE_ROLES,
   TENANT_SERVICE_ACCOUNTS_DEMO,
   type ServiceAccountAssignableRoleId,
@@ -24,7 +24,7 @@ import {
 type BindServiceAccountRoleModalProps = {
   account: TenantServiceAccount | null
   onClose: () => void
-  onBind: (roleId: AssignableTenantRoleId) => void
+  onBind: (roleId: ServiceAccountAssignableRoleId) => void
 }
 
 export function BindServiceAccountRoleModal({
@@ -33,7 +33,12 @@ export function BindServiceAccountRoleModal({
   onBind,
 }: BindServiceAccountRoleModalProps) {
   const boundRoleIds = useMemo(
-    () => new Set(account?.roleBindings.map((binding) => binding.roleId) ?? []),
+    () =>
+      new Set(
+        account
+          ? listServiceAccountAssignableRoleBindings(account).map((binding) => binding.roleId)
+          : [],
+      ),
     [account],
   )
   const availableRoles = useMemo(
@@ -68,7 +73,7 @@ export function BindServiceAccountRoleModal({
       <ModalBody>
         {availableRoles.length === 0 ? (
           <Content component="p">
-            This service account already has every available tenant role.
+            This service account already has Tenant Admin and Tenant User.
           </Content>
         ) : (
           <Form className="tenant-admin-service-accounts__bind-role-form">

@@ -201,9 +201,6 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
   const handleCreated = (account: TenantServiceAccount) => {
     refreshAccounts()
     setSelectedAccountId(account.id)
-    if (isDesign2) {
-      setCredentialsAccount(account)
-    }
   }
 
   const openEdit = (account: TenantServiceAccount) => {
@@ -230,7 +227,6 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
     if (isDesign2) {
       const next = markTenantServiceAccountDeleting(tenantSlug, accountPendingDelete.id)
       setAccounts(next)
-      setSelectedAccountId(accountPendingDelete.id)
     } else {
       const next = deleteTenantServiceAccount(tenantSlug, accountPendingDelete.id)
       setAccounts(next)
@@ -325,7 +321,11 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
       aria-describedby="delete-service-account-description"
     >
       <ModalHeader
-        title="Delete service account?"
+        title={
+          isDesign2 && accountPendingDelete
+            ? `Delete ${accountPendingDelete.name}?`
+            : 'Delete service account?'
+        }
         titleIconVariant="warning"
         labelId="delete-service-account-title"
       />
@@ -333,11 +333,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
         <Content component="p" id="delete-service-account-description">
           {accountPendingDelete ? (
             isDesign2 ? (
-              <>
-                Are you sure you want to delete <strong>{accountPendingDelete.name}</strong>? Access
-                is revoked immediately. The account will show as &apos;Deleting&apos; while cleanup
-                completes.
-              </>
+              'Access ends immediately. Status stays Deleting until cleanup finishes.'
             ) : (
               <>
                 <strong>{accountPendingDelete.name}</strong> and its linked token secrets will be
@@ -599,11 +595,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
                           component="p"
                           className="tenant-admin-administration__meta-cell tenant-admin-administration__card-email"
                         >
-                          {isDesign2 ? (
-                            <code>{clientId}</code>
-                          ) : (
-                            account.description || '—'
-                          )}
+                          {isDesign2 ? clientId : account.description || '—'}
                         </Content>
                         <CatalogSpecRowsList
                           rows={[
@@ -643,14 +635,30 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
               />
               <Table
                 aria-label="Service accounts"
-                className="catalog-data-table tenant-admin-administration__table"
+                className={[
+                  'catalog-data-table',
+                  'tenant-admin-administration__table',
+                  isDesign2 ? 'tenant-admin-service-accounts__table--design2' : undefined,
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
               >
                 <Thead>
                   <Tr>
                     <Th className="tenant-admin-administration__col-name">Name</Th>
-                    {isDesign2 ? <Th>Client ID</Th> : <Th>Project</Th>}
-                    {isDesign2 ? <Th>Status</Th> : <Th>Keys</Th>}
-                    <Th>Created</Th>
+                    {isDesign2 ? (
+                      <Th className="tenant-admin-service-accounts__col-status">Status</Th>
+                    ) : (
+                      <Th>Project</Th>
+                    )}
+                    {isDesign2 ? (
+                      <Th className="tenant-admin-service-accounts__col-client-id">Client ID</Th>
+                    ) : (
+                      <Th>Keys</Th>
+                    )}
+                    <Th className={isDesign2 ? 'tenant-admin-service-accounts__col-created' : undefined}>
+                      Created
+                    </Th>
                     <Th screenReaderText="Actions" />
                   </Tr>
                 </Thead>
@@ -684,8 +692,13 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
                           ) : null}
                         </Td>
                         {isDesign2 ? (
-                          <Td dataLabel="Client ID">
-                            <code>{clientId}</code>
+                          <Td
+                            dataLabel="Status"
+                            className="tenant-admin-service-accounts__col-status"
+                          >
+                            <Label color={getServiceAccountStatusColor(status)} isCompact>
+                              {getServiceAccountStatusLabel(status)}
+                            </Label>
                           </Td>
                         ) : (
                           <Td dataLabel="Project">
@@ -695,15 +708,21 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
                           </Td>
                         )}
                         {isDesign2 ? (
-                          <Td dataLabel="Status">
-                            <Label color={getServiceAccountStatusColor(status)} isCompact>
-                              {getServiceAccountStatusLabel(status)}
-                            </Label>
+                          <Td
+                            dataLabel="Client ID"
+                            className="tenant-admin-service-accounts__col-client-id"
+                          >
+                            {clientId}
                           </Td>
                         ) : (
                           <Td dataLabel="Keys">{account.tokenSecretIds.length}</Td>
                         )}
-                        <Td dataLabel="Created">
+                        <Td
+                          dataLabel="Created"
+                          className={
+                            isDesign2 ? 'tenant-admin-service-accounts__col-created' : undefined
+                          }
+                        >
                           {formatServiceAccountCreatedAt(account.createdAt)}
                         </Td>
                         <Td isActionCell>

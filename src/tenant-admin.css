@@ -336,6 +336,57 @@
   gap: var(--pf-t--global--spacer--sm);
 }
 
+.tenant-admin-service-accounts__table--design2 {
+  table-layout: fixed;
+}
+
+.tenant-admin-service-accounts__table--design2 .tenant-admin-administration__col-name {
+  --pf-v6-c-table--cell--Width: 22%;
+  --pf-v6-c-table--cell--MinWidth: 10rem;
+  --pf-v6-c-table--cell--MaxWidth: none;
+}
+
+.tenant-admin-service-accounts__col-status {
+  --pf-v6-c-table--cell--Width: 12%;
+  --pf-v6-c-table--cell--MinWidth: 7rem;
+  --pf-v6-c-table--cell--MaxWidth: none;
+  --pf-v6-c-table--cell--WhiteSpace: nowrap;
+}
+
+.tenant-admin-service-accounts__col-client-id {
+  --pf-v6-c-table--cell--Width: 46%;
+  --pf-v6-c-table--cell--MinWidth: 16rem;
+  --pf-v6-c-table--cell--MaxWidth: none;
+  --pf-v6-c-table--cell--Overflow: hidden;
+  --pf-v6-c-table--cell--TextOverflow: ellipsis;
+  --pf-v6-c-table--cell--WhiteSpace: nowrap;
+}
+
+.tenant-admin-service-accounts__col-created {
+  --pf-v6-c-table--cell--Width: 14%;
+  --pf-v6-c-table--cell--MinWidth: 7.5rem;
+  --pf-v6-c-table--cell--MaxWidth: none;
+  --pf-v6-c-table--cell--WhiteSpace: nowrap;
+}
+
+/* Design 2: one body font across list, wizard, and credentials (no monospace). */
+.tenant-admin-service-accounts__table--design2,
+.tenant-admin-service-accounts__client-id-preview,
+.tenant-admin-service-accounts__wizard-review,
+.tenant-admin-service-accounts__credentials-panel,
+.tenant-admin-service-accounts__credentials,
+.tenant-admin-service-accounts__credentials-panel code,
+.tenant-admin-service-accounts__credentials code,
+.tenant-admin-service-accounts__credentials-panel .pf-v6-c-clipboard-copy,
+.tenant-admin-service-accounts__credentials .pf-v6-c-clipboard-copy,
+.tenant-admin-service-accounts__credentials-panel .pf-v6-c-clipboard-copy__text,
+.tenant-admin-service-accounts__credentials .pf-v6-c-clipboard-copy__text,
+.tenant-admin-service-accounts__credentials-panel .pf-v6-c-form-control,
+.tenant-admin-service-accounts__credentials .pf-v6-c-form-control,
+.tenant-admin-service-accounts__secret-row .pf-v6-c-form-control {
+  font-family: var(--pf-t--global--font--family--body);
+}
+
 .tenant-admin-service-accounts__wizard-lede.pf-v6-c-content--p {
   margin-block: 0 var(--pf-t--global--spacer--lg);
   color: var(--pf-t--global--text--color--subtle);
@@ -352,10 +403,6 @@
 }
 
 .tenant-admin-service-accounts__create-permissions-alert {
-  margin: 0;
-}
-
-.tenant-admin-service-accounts__client-id-preview.pf-v6-c-content--p {
   margin: 0;
 }
 
