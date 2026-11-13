@@ -123,6 +123,7 @@ import {
   getCatalogServiceOffering,
   getPublishCatalogSuggestedDisplayName,
   getPublishCatalogSuggestedDescription,
+  formatRateCardSummary,
   resolveRateCard,
   PUBLISH_CATALOG_STEPS,
   type CatalogServiceId,
@@ -2208,6 +2209,32 @@ export function ProviderSetupPublishCatalogWizard({
                   Add node set
                 </Button>
               ) : null}
+              {resolvedClusterComposedRate ? (
+                <Content
+                  component="p"
+                  className="provider-setup-template__publish-step-lede"
+                  style={{ marginTop: '1rem' }}
+                >
+                  <strong>Rate</strong>{' '}
+                  {formatRateCardSummary(
+                    clusterComposedRateToRateCard(resolvedClusterComposedRate),
+                  )}{' '}
+                  — composed from the selected node sets (control-plane fee and
+                  worker machine-type rates on the tenant plan).
+                </Content>
+              ) : (
+                <Alert
+                  variant="warning"
+                  isInline
+                  title="M360 rate line missing"
+                  className="provider-setup-template__publish-policies-alert"
+                  style={{ marginTop: '1rem' }}
+                >
+                  Matching control-plane and worker rates must exist on{' '}
+                  <strong>{getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}</strong>{' '}
+                  before this offering can be created.
+                </Alert>
+              )}
             </FormGroup>
           </div>
         )
@@ -2638,6 +2665,24 @@ export function ProviderSetupPublishCatalogWizard({
                     {isVipEnterprise
                       ? formatVipEnterpriseVisibilityLabel(organizations, enterpriseTenantIds)
                       : 'Global public'}
+                  </DescriptionListDescription>
+                </DescriptionListGroup>
+              ) : null}
+              {m360RateConfigured ? (
+                <DescriptionListGroup>
+                  <DescriptionListTerm>Rate</DescriptionListTerm>
+                  <DescriptionListDescription>
+                    {isClusterService && resolvedClusterComposedRate
+                      ? formatRateCardSummary(
+                          clusterComposedRateToRateCard(resolvedClusterComposedRate),
+                        )
+                      : isBareMetalService && resolvedBareMetalComposedRate
+                        ? formatRateCardSummary(
+                            clusterComposedRateToRateCard(resolvedBareMetalComposedRate),
+                          )
+                        : resolvedM360RateLine
+                          ? formatRateCardSummary(m360RateLineToRateCard(resolvedM360RateLine))
+                          : '—'}
                   </DescriptionListDescription>
                 </DescriptionListGroup>
               ) : null}

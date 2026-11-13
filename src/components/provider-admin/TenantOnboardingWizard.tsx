@@ -687,10 +687,26 @@ export function TenantOnboardingWizard({
     setLinkError(null)
     await new Promise((resolve) => window.setTimeout(resolve, 500))
 
-    const withoutBillingLink: RegisteredOrganization = {
-      ...organization,
-      externalBillingId: normalizeExternalBillingId(form.externalBillingId).trim(),
-    }
+    const externalBillingId = normalizeExternalBillingId(form.externalBillingId).trim()
+
+    // Design 2: no integrated billing — optional external ID must not leave "Billing pending".
+    // Empty ID is allowed; providers can add it later via Edit.
+    const withoutBillingLink: RegisteredOrganization = hideIntegratedBillingUi
+      ? {
+          ...organization,
+          externalBillingId,
+          m360AccountId: '',
+          billingAccountId: '',
+          billingAccountName: '',
+          billingAccountLinked: false,
+          m360ConnectionStatus: 'not_found',
+          tenantSetupStatus: 'ready',
+        }
+      : {
+          // Design 1 "Set up later": keep billing incomplete until an M360 account is linked.
+          ...organization,
+          externalBillingId,
+        }
 
     setCreatedOrganization(withoutBillingLink)
     onPersistOrganization(withoutBillingLink)
@@ -877,7 +893,9 @@ export function TenantOnboardingWizard({
           <HelperText>
             <HelperTextItem>
               {showZuoraGuidance
-                ? 'Optional. Not checked against the platform.'
+                ? hideIntegratedBillingUi
+                  ? 'Optional. Leave blank to register now; you can add it later from Edit. Not checked against the platform.'
+                  : 'Optional. Not checked against the platform.'
                 : 'Your billing system’s account ID. Not checked against the platform.'}
             </HelperTextItem>
           </HelperText>
@@ -895,15 +913,17 @@ export function TenantOnboardingWizard({
       return (
         <div className="provider-admin-organizations__wizard-step tenant-onboarding__step">
           <Content component="p" className="provider-admin-organizations__wizard-lede">
-            Enter an optional external billing ID for this tenant.
+            Enter an optional external billing ID for this tenant. You can leave it blank and add
+            it later.
           </Content>
           <Alert
             variant="info"
             isInline
-            title="No integrated billing system detected"
+            title="External billing ID"
             className="tenant-onboarding__alert"
           >
-            Billing account linking is unavailable. Enter an optional external billing ID instead.
+            Optional. Use your external system’s account ID (for example Zuora). It is not checked
+            against the platform.
           </Alert>
           <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
             {renderExternalBillingIdField()}
@@ -1152,17 +1172,7 @@ export function TenantOnboardingWizard({
               </>
             ) : null}
           </Form>
-        ) : (
-          <Alert
-            variant="info"
-            isInline
-            title="Billing can be linked later"
-            className="tenant-onboarding__alert tenant-onboarding__timing-later-alert"
-          >
-            The tenant will be registered without a billing account. You can link one from tenant
-            details when ready.
-          </Alert>
-        )}
+        ) : null}
 
         <div className="tenant-onboarding__optional-billing">
           <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
@@ -1243,23 +1253,24 @@ export function TenantOnboardingWizard({
               )}
             </DescriptionListDescription>
           </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Billing</DescriptionListTerm>
-            <DescriptionListDescription>
-              {hideIntegratedBillingUi
-                ? 'External billing ID only (no integrated billing)'
-                : linkBillingNow && isM360PlatformSelected && selectedAccount
+          {!hideIntegratedBillingUi ? (
+            <DescriptionListGroup>
+              <DescriptionListTerm>Billing</DescriptionListTerm>
+              <DescriptionListDescription>
+                {linkBillingNow && isM360PlatformSelected && selectedAccount
                   ? formatBillingPlatformAccountSummary(
                       billingPlatformId,
                       getM360AccountTenantName(selectedAccount),
                     )
                   : 'Set up later'}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+          ) : null}
           <DescriptionListGroup>
             <DescriptionListTerm>External billing ID</DescriptionListTerm>
             <DescriptionListDescription>
-              {normalizeExternalBillingId(form.externalBillingId).trim() || '—'}
+              {normalizeExternalBillingId(form.externalBillingId).trim() ||
+                (hideIntegratedBillingUi ? 'Not set — can add later' : '—')}
             </DescriptionListDescription>
           </DescriptionListGroup>
         </DescriptionList>

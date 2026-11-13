@@ -219,8 +219,46 @@ export function getTenantSetupStatusColor(
   }
 }
 
+/**
+ * Billing-only readiness (M360 linked / Design 2 external-ID path complete).
+ * Used to unlock IdP setup — not the tenant-details “Setup status” label.
+ */
 export function isTenantReadyForProvisioning(organization: RegisteredOrganization): boolean {
   return resolveTenantSetupStatus(organization) === 'ready'
+}
+
+/**
+ * Overall setup label for tenant details.
+ * “Ready for provisioning” requires billing ready and identity provider connected
+ * (and no remaining setup signals such as roles).
+ */
+export function getOrganizationSetupDisplayStatus(
+  organization: RegisteredOrganization,
+  options?: { externalBillingOnly?: boolean },
+): {
+  label: string
+  color: 'orange' | 'blue' | 'green'
+} {
+  const filterKey = getOrganizationSetupFilterKey(organization, options)
+  switch (filterKey) {
+    case 'ready':
+      return { label: 'Ready for provisioning', color: 'green' }
+    case 'needs-billing': {
+      const billingStatus = resolveTenantSetupStatus(organization)
+      if (billingStatus === 'billing_configured') {
+        return { label: 'Billing configured', color: 'blue' }
+      }
+      return { label: 'Incomplete', color: 'orange' }
+    }
+    case 'needs-idp':
+      return { label: 'Needs identity provider', color: 'orange' }
+    case 'waiting-idp':
+      return { label: 'Waiting on IdP Manager', color: 'orange' }
+    case 'expired-idp':
+      return { label: 'IdP manager link expired', color: 'orange' }
+    case 'needs-roles':
+      return { label: 'Needs roles', color: 'orange' }
+  }
 }
 
 export function isTenantBillingConfigured(organization: RegisteredOrganization): boolean {
@@ -822,13 +860,19 @@ export function resolveIdpManagerPrototypeOrganization(
 }
 
 /** Under-Status line: next incomplete step while setup is incomplete. */
-export function getOrganizationSetupSignal(organization: RegisteredOrganization): string | null {
-  const setupStatus = resolveTenantSetupStatus(organization)
-  if (setupStatus === 'incomplete') {
-    return 'Billing pending'
-  }
-  if (setupStatus === 'billing_configured') {
-    return 'Billing account not linked'
+export function getOrganizationSetupSignal(
+  organization: RegisteredOrganization,
+  options?: { externalBillingOnly?: boolean },
+): string | null {
+  const externalBillingOnly = options?.externalBillingOnly === true
+  if (!externalBillingOnly) {
+    const setupStatus = resolveTenantSetupStatus(organization)
+    if (setupStatus === 'incomplete') {
+      return 'Billing pending'
+    }
+    if (setupStatus === 'billing_configured') {
+      return 'Billing account not linked'
+    }
   }
 
   if (!organization.identityProviderConnected) {
@@ -889,10 +933,14 @@ export function getOrganizationOsacLoginPath(slug: string): string {
 /** Single next kebab / Status-link action while setup is incomplete. */
 export function getOrganizationSetupNextAction(
   organization: RegisteredOrganization,
+  options?: { externalBillingOnly?: boolean },
 ): OrganizationSetupNextAction | null {
-  const setupStatus = resolveTenantSetupStatus(organization)
-  if (setupStatus !== 'ready') {
-    return 'billing'
+  const externalBillingOnly = options?.externalBillingOnly === true
+  if (!externalBillingOnly) {
+    const setupStatus = resolveTenantSetupStatus(organization)
+    if (setupStatus !== 'ready') {
+      return 'billing'
+    }
   }
 
   if (!organization.identityProviderConnected) {
@@ -1007,12 +1055,18 @@ function getOrganizationIdentityProviderStepDescription(
 /** Vertical tenant setup timeline for the organization details page. */
 export function getOrganizationActivationSteps(
   organization: RegisteredOrganization,
+  options?: { externalBillingOnly?: boolean },
 ): OrganizationActivationStep[] {
+  const externalBillingOnly = options?.externalBillingOnly === true
+  const externalBillingId = organization.externalBillingId?.trim() || ''
   const m360AccountId =
     organization.m360AccountId?.trim() || organization.billingAccountId.trim()
   const billingAccountInactive = isOrganizationSetupM360AccountInactive(organization)
-  const billingAccountComplete = Boolean(m360AccountId) && !billingAccountInactive
-  const billingAccountProblematic = Boolean(m360AccountId) && billingAccountInactive
+  const billingAccountComplete = externalBillingOnly
+    ? true // Optional metadata — never blocks IdP setup
+    : Boolean(m360AccountId) && !billingAccountInactive
+  const billingAccountProblematic =
+    !externalBillingOnly && Boolean(m360AccountId) && billingAccountInactive
   const idpComplete = organization.identityProviderConnected
 
   const steps: Array<
@@ -1026,10 +1080,12 @@ export function getOrganizationActivationSteps(
     },
     {
       id: 'billing_account',
-      label: 'M360 billing account',
+      label: externalBillingOnly ? 'External billing ID' : 'Billing account',
       complete: billingAccountComplete,
       problematic: billingAccountProblematic,
-      description: getOrganizationBillingAccountStepDescription(organization),
+      description: externalBillingOnly
+        ? externalBillingId || 'Not set'
+        : getOrganizationBillingAccountStepDescription(organization),
     },
     {
       id: 'idp',
@@ -1939,13 +1995,15 @@ export const ORGANIZATION_SETUP_FILTER_OPTIONS: ReadonlyArray<{
 
 export function getOrganizationSetupFilterKey(
   organization: RegisteredOrganization,
+  options?: { externalBillingOnly?: boolean },
 ): Exclude<OrganizationSetupFilter, 'all'> {
+  const externalBillingOnly = options?.externalBillingOnly === true
   const setupStatus = resolveTenantSetupStatus(organization)
-  if (setupStatus !== 'ready') {
+  if (!externalBillingOnly && setupStatus !== 'ready') {
     return 'needs-billing'
   }
 
-  const signal = getOrganizationSetupSignal(organization)
+  const signal = getOrganizationSetupSignal(organization, options)
   if (signal === null) {
     return 'ready'
   }
@@ -1964,12 +2022,13 @@ export function getOrganizationSetupFilterKey(
 export function matchesOrganizationSetupFilter(
   organization: RegisteredOrganization,
   filter: OrganizationSetupFilter,
+  options?: { externalBillingOnly?: boolean },
 ): boolean {
   if (filter === 'all') {
     return true
   }
 
-  return getOrganizationSetupFilterKey(organization) === filter
+  return getOrganizationSetupFilterKey(organization, options) === filter
 }
 
 export function organizationMatchesSearch(

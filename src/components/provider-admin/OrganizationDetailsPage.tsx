@@ -36,8 +36,7 @@ import { EntityDetailsActionsDropdown } from '../shared/EntityDetailsActionsDrop
 import {
   getOrganizationActivationSteps,
   getOrganizationOsacLoginPath,
-  getTenantSetupStatusColor,
-  getTenantSetupStatusLabel,
+  getOrganizationSetupDisplayStatus,
   identityProviderConnectedByLabel,
   isOrganizationReadyForLogin,
   isTenantReadyForProvisioning,
@@ -69,6 +68,8 @@ type OrganizationDetailsPageProps = {
   onReviewIdentityProvider?: (organization: RegisteredOrganization) => void
   onReviewRoles?: (organization: RegisteredOrganization) => void
   onOrganizationChange?: (organization: RegisteredOrganization) => void
+  /** Design 2 external-billing-ID topic: hide M360 and offer add/edit external ID. */
+  externalBillingOnly?: boolean
 }
 
 function formatRegisteredAt(iso: string): string {
@@ -160,11 +161,13 @@ function TenantSetupTimelineStep({
   organization,
   onReviewBilling,
   onReviewIdentityProvider,
+  externalBillingOnly = false,
 }: {
   step: OrganizationActivationStep
   organization: RegisteredOrganization
   onReviewBilling?: (organization: RegisteredOrganization) => void
   onReviewIdentityProvider?: (organization: RegisteredOrganization) => void
+  externalBillingOnly?: boolean
 }) {
   const stepId = `tenant-setup-step-${step.id}`
   const connectedBy =
@@ -174,8 +177,10 @@ function TenantSetupTimelineStep({
     : null
   const canReviewBilling =
     step.id === 'billing_account' &&
-    (step.status === 'current' || step.status === 'problematic') &&
-    typeof onReviewBilling === 'function'
+    typeof onReviewBilling === 'function' &&
+    (externalBillingOnly ||
+      step.status === 'current' ||
+      step.status === 'problematic')
   const canReviewIdp =
     step.id === 'idp' &&
     !step.complete &&
@@ -259,6 +264,15 @@ function TenantBillingConfiguration({
   const accountInactive = isOrganizationM360AccountInactive(organization)
 
   if (!m360AccountId) {
+    // Design 2 / external-ID-only: billing is already complete with no M360 link.
+    if (resolveTenantSetupStatus(organization) === 'ready') {
+      return (
+        <Content component="p" className="provider-admin-organizations__billing-summary">
+          No integrated billing
+        </Content>
+      )
+    }
+
     return (
       <Content component="p" className="provider-admin-organizations__billing-summary">
         Not configured
@@ -311,9 +325,15 @@ export function OrganizationDetailsPage({
   onReviewIdentityProvider,
   onReviewRoles,
   onOrganizationChange,
+  externalBillingOnly = false,
 }: OrganizationDetailsPageProps) {
-  const activationSteps = getOrganizationActivationSteps(organization)
-  const tenantSetupStatus = resolveTenantSetupStatus(organization)
+  const activationSteps = getOrganizationActivationSteps(organization, {
+    externalBillingOnly,
+  })
+  const externalBillingId = organization.externalBillingId?.trim() || ''
+  const setupDisplayStatus = getOrganizationSetupDisplayStatus(organization, {
+    externalBillingOnly,
+  })
   const roleAssignments = listRoleAssignments(organization)
   const companyLogoSrc = isHarborlineCapitalOrganization(organization)
     ? null
@@ -400,8 +420,8 @@ export function OrganizationDetailsPage({
                 <DescriptionListGroup>
                   <DescriptionListTerm>Setup status</DescriptionListTerm>
                   <DescriptionListDescription>
-                    <Label color={getTenantSetupStatusColor(tenantSetupStatus)} isCompact>
-                      {getTenantSetupStatusLabel(tenantSetupStatus)}
+                    <Label color={setupDisplayStatus.color} isCompact>
+                      {setupDisplayStatus.label}
                     </Label>
                   </DescriptionListDescription>
                 </DescriptionListGroup>
@@ -460,22 +480,54 @@ export function OrganizationDetailsPage({
                 <DescriptionListGroup>
                   <DescriptionListTerm>External billing ID</DescriptionListTerm>
                   <DescriptionListDescription>
-                    {organization.externalBillingId?.trim() ? (
-                      <code>{organization.externalBillingId.trim()}</code>
+                    {externalBillingOnly ? (
+                      <Content component="p" className="provider-admin-organizations__billing-summary">
+                        {externalBillingId ? (
+                          <>
+                            <code>{externalBillingId}</code>
+                            {onReviewBilling ? (
+                              <>
+                                <BillingSummarySeparator />
+                                <Button
+                                  variant="link"
+                                  isInline
+                                  onClick={() => onReviewBilling(organization)}
+                                >
+                                  Edit
+                                </Button>
+                              </>
+                            ) : null}
+                          </>
+                        ) : onReviewBilling ? (
+                          <Button
+                            variant="link"
+                            isInline
+                            onClick={() => onReviewBilling(organization)}
+                          >
+                            Add external billing ID
+                          </Button>
+                        ) : (
+                          '—'
+                        )}
+                      </Content>
+                    ) : externalBillingId ? (
+                      <code>{externalBillingId}</code>
                     ) : (
                       '—'
                     )}
                   </DescriptionListDescription>
                 </DescriptionListGroup>
-                <DescriptionListGroup>
-                  <DescriptionListTerm>Billing</DescriptionListTerm>
-                  <DescriptionListDescription>
-                    <TenantBillingConfiguration
-                      organization={organization}
-                      onReviewBilling={onReviewBilling}
-                    />
-                  </DescriptionListDescription>
-                </DescriptionListGroup>
+                {!externalBillingOnly ? (
+                  <DescriptionListGroup>
+                    <DescriptionListTerm>Billing</DescriptionListTerm>
+                    <DescriptionListDescription>
+                      <TenantBillingConfiguration
+                        organization={organization}
+                        onReviewBilling={onReviewBilling}
+                      />
+                    </DescriptionListDescription>
+                  </DescriptionListGroup>
+                ) : null}
                 <DescriptionListGroup>
                   <DescriptionListTerm>Registered</DescriptionListTerm>
                   <DescriptionListDescription>
@@ -501,6 +553,7 @@ export function OrganizationDetailsPage({
                     organization={organization}
                     onReviewBilling={onReviewBilling}
                     onReviewIdentityProvider={onReviewIdentityProvider}
+                    externalBillingOnly={externalBillingOnly}
                   />
                 ))}
               </ProgressStepper>

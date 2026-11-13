@@ -140,6 +140,30 @@ function renderOrganizationBillingPendingLabel(organization: RegisteredOrganizat
   )
 }
 
+function renderExternalBillingIdValue(
+  organization: RegisteredOrganization,
+  onAddOrEdit: (organization: RegisteredOrganization) => void,
+) {
+  const externalBillingId = organization.externalBillingId?.trim() || ''
+
+  if (!externalBillingId) {
+    return (
+      <Button variant="link" isInline onClick={() => onAddOrEdit(organization)}>
+        Add external billing ID
+      </Button>
+    )
+  }
+
+  return (
+    <span className="provider-admin-organizations__card-billing">
+      <span>{externalBillingId}</span>
+      <Button variant="link" isInline onClick={() => onAddOrEdit(organization)}>
+        Edit
+      </Button>
+    </span>
+  )
+}
+
 export function ProviderAdminOrganizationsPage({
   onNavigate,
 }: {
@@ -151,6 +175,7 @@ export function ProviderAdminOrganizationsPage({
     searchParams.get('topic')?.trim() === TOPIC_EXTERNAL_BILLING_ID
   const billingDesignVariant: ExternalBillingDesignVariant =
     externalBillingTopicActive && externalBillingDesignParam === '2' ? 'option-b' : 'option-a'
+  const isExternalBillingOnlyDesign = billingDesignVariant === 'option-b'
   const [organizations, setOrganizations] = useState<RegisteredOrganization[]>(() =>
     ensureProviderDemoOrganizations(),
   )
@@ -205,13 +230,23 @@ export function ProviderAdminOrganizationsPage({
         return false
       }
 
-      if (!matchesOrganizationSetupFilter(organization, selectedSetup)) {
+      if (
+        !matchesOrganizationSetupFilter(organization, selectedSetup, {
+          externalBillingOnly: isExternalBillingOnlyDesign,
+        })
+      ) {
         return false
       }
 
       return organizationMatchesSearch(organization, searchValue)
     })
-  }, [orderedOrganizations, searchValue, selectedSetup, selectedStatus])
+  }, [
+    isExternalBillingOnlyDesign,
+    orderedOrganizations,
+    searchValue,
+    selectedSetup,
+    selectedStatus,
+  ])
 
   useLayoutEffect(() => {
     measureCreatingCardHeight(viewMode === 'grid', 'provider-admin-catalog-items__card--creating')
@@ -276,6 +311,12 @@ export function ProviderAdminOrganizationsPage({
       clearActivatingTimer()
     }
   }, [])
+
+  useEffect(() => {
+    if (isExternalBillingOnlyDesign && selectedSetup === 'needs-billing') {
+      setSelectedSetup('all')
+    }
+  }, [isExternalBillingOnlyDesign, selectedSetup])
 
   useEffect(() => {
     const organizationId = getWorkspaceOrganizationParam(searchParams)
@@ -654,6 +695,7 @@ export function ProviderAdminOrganizationsPage({
           }}
           onReviewRoles={(organization) => setRolesOrganization(organization)}
           onOrganizationChange={(organization) => refreshOrganizations(organization.id)}
+          externalBillingOnly={isExternalBillingOnlyDesign}
         />
       ) : (
       <div className="provider-admin-workspace-page provider-admin-organizations">
@@ -694,7 +736,10 @@ export function ProviderAdminOrganizationsPage({
                 }
                 aria-label="Filter tenants by setup state"
               >
-                {ORGANIZATION_SETUP_FILTER_OPTIONS.map((option) => (
+                {ORGANIZATION_SETUP_FILTER_OPTIONS.filter(
+                  (option) =>
+                    !isExternalBillingOnlyDesign || option.value !== 'needs-billing',
+                ).map((option) => (
                   <FormSelectOption key={option.value} value={option.value} label={option.label} />
                 ))}
               </FormSelect>
@@ -754,9 +799,15 @@ export function ProviderAdminOrganizationsPage({
               {filteredOrganizations.map((org) => {
                 const isRegistering = registeringOrganizationId === org.id
                 const isActivating = activatingOrganizationId === org.id
-                const setupSignal = isRegistering || isActivating ? null : getOrganizationSetupSignal(org)
+                const setupOptions = { externalBillingOnly: isExternalBillingOnlyDesign }
+                const setupSignal =
+                  isRegistering || isActivating
+                    ? null
+                    : getOrganizationSetupSignal(org, setupOptions)
                 const nextAction =
-                  isRegistering || isActivating ? null : getOrganizationSetupNextAction(org)
+                  isRegistering || isActivating
+                    ? null
+                    : getOrganizationSetupNextAction(org, setupOptions)
 
                 return (
                   <Card
@@ -841,10 +892,14 @@ export function ProviderAdminOrganizationsPage({
                         </div>
                         <div className="provider-admin-catalog-items__spec-row">
                           <dt className="provider-admin-catalog-items__spec-label">
-                            Billing account
+                            {isExternalBillingOnlyDesign
+                              ? 'External billing ID'
+                              : 'Billing account'}
                           </dt>
                           <dd className="provider-admin-catalog-items__spec-value">
-                            {isOrganizationBillingPending(org) ? (
+                            {isExternalBillingOnlyDesign ? (
+                              renderExternalBillingIdValue(org, openBillingSetup)
+                            ) : isOrganizationBillingPending(org) ? (
                               renderOrganizationBillingPendingLabel(org)
                             ) : (
                               <span className="provider-admin-organizations__card-billing">
@@ -914,7 +969,7 @@ export function ProviderAdminOrganizationsPage({
                 <Th>Tenant</Th>
                 <Th>Status</Th>
                 <Th>Primary domain</Th>
-                <Th>Billing account</Th>
+                {!isExternalBillingOnlyDesign ? <Th>Billing account</Th> : null}
                 <Th>External billing ID</Th>
                 <Th>Registered</Th>
                 <Th screenReaderText="Actions" />
@@ -925,6 +980,8 @@ export function ProviderAdminOrganizationsPage({
                 const isRegistering = registeringOrganizationId === org.id
                 const isActivating = activatingOrganizationId === org.id
                 const isStatusPending = isRegistering || isActivating
+                const tableColSpan = isExternalBillingOnlyDesign ? 6 : 7
+                const setupOptions = { externalBillingOnly: isExternalBillingOnlyDesign }
 
                 if (isRegistering) {
                   return (
@@ -932,14 +989,18 @@ export function ProviderAdminOrganizationsPage({
                       key={org.id}
                       itemId={org.id}
                       label="Registering tenant…"
-                      colSpan={7}
+                      colSpan={tableColSpan}
                       className="provider-admin-organizations__row--registering catalog-resource-creating-row"
                     />
                   )
                 }
 
-                const setupSignal = isStatusPending ? null : getOrganizationSetupSignal(org)
-                const nextAction = isStatusPending ? null : getOrganizationSetupNextAction(org)
+                const setupSignal = isStatusPending
+                  ? null
+                  : getOrganizationSetupSignal(org, setupOptions)
+                const nextAction = isStatusPending
+                  ? null
+                  : getOrganizationSetupNextAction(org, setupOptions)
 
                 return (
                   <Tr
@@ -1001,22 +1062,32 @@ export function ProviderAdminOrganizationsPage({
                         {org.primaryDomain || '—'}
                       </Content>
                     </Td>
-                    <Td modifier="wrap" dataLabel="Billing account">
-                      {isOrganizationBillingPending(org) ? (
-                        renderOrganizationBillingPendingLabel(org)
-                      ) : (
-                        <>
-                          <Content component="p" className="provider-admin-organizations__primary-cell">
-                            {org.billingAccountName}
-                          </Content>
-                          <Content component="p" className="provider-admin-organizations__secondary-cell">
-                            <code>{getOrganizationBillingAccountDisplay(org)}</code>
-                          </Content>
-                        </>
-                      )}
-                    </Td>
+                    {!isExternalBillingOnlyDesign ? (
+                      <Td modifier="wrap" dataLabel="Billing account">
+                        {isOrganizationBillingPending(org) ? (
+                          renderOrganizationBillingPendingLabel(org)
+                        ) : (
+                          <>
+                            <Content
+                              component="p"
+                              className="provider-admin-organizations__primary-cell"
+                            >
+                              {org.billingAccountName}
+                            </Content>
+                            <Content
+                              component="p"
+                              className="provider-admin-organizations__secondary-cell"
+                            >
+                              <code>{getOrganizationBillingAccountDisplay(org)}</code>
+                            </Content>
+                          </>
+                        )}
+                      </Td>
+                    ) : null}
                     <Td modifier="wrap" dataLabel="External billing ID">
-                      {org.externalBillingId?.trim() ? (
+                      {isExternalBillingOnlyDesign ? (
+                        renderExternalBillingIdValue(org, openBillingSetup)
+                      ) : org.externalBillingId?.trim() ? (
                         <code>{org.externalBillingId.trim()}</code>
                       ) : (
                         '—'
