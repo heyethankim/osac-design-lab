@@ -92,9 +92,15 @@ export const DESIGN_HUB_TOPIC_OPTIONS: Record<string, readonly DesignHubOption[]
   [TOPIC_NAVIGATION_STRUCTURE]: [
     {
       key: '1',
-      label: 'Design',
-      to: buildNavigationStructurePath(TOPIC_NAVIGATION_STRUCTURE),
-      isCurrent: () => true,
+      label: 'Design 1',
+      to: buildNavigationStructurePath(TOPIC_NAVIGATION_STRUCTURE, { design: '1' }),
+      isCurrent: (_p, s) => designParamIs(s, '1') || !s.get(WORKSPACE_DESIGN_PARAM),
+    },
+    {
+      key: '2',
+      label: 'Design 2',
+      to: buildNavigationStructurePath(TOPIC_NAVIGATION_STRUCTURE, { design: '2' }),
+      isCurrent: (_p, s) => designParamIs(s, '2'),
     },
   ],
   [TOPIC_CATALOG_ITEM_CREATION]: [

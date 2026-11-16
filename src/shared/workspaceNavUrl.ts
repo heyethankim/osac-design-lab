@@ -176,8 +176,19 @@ export function buildDesignHubHomePath(topicId?: string | null): string {
 export const NAVIGATION_STRUCTURE_TOPIC_ID = 'navigation-structure'
 export const NAVIGATION_STRUCTURE_PATH = '/design/navigation-structure'
 
-export function buildNavigationStructurePath(topicId = NAVIGATION_STRUCTURE_TOPIC_ID): string {
-  return withDesignHubParam(NAVIGATION_STRUCTURE_PATH, topicId)
+export function buildNavigationStructurePath(
+  topicId = NAVIGATION_STRUCTURE_TOPIC_ID,
+  options?: { design?: string },
+): string {
+  const path = withDesignHubParam(NAVIGATION_STRUCTURE_PATH, topicId)
+  if (!options?.design) {
+    return path
+  }
+  const [pathname, search = ''] = path.split('?')
+  const params = new URLSearchParams(search)
+  params.set(WORKSPACE_DESIGN_PARAM, options.design)
+  const next = params.toString()
+  return next ? `${pathname}?${next}` : pathname
 }
 
 export function isServicesWorkspaceNav(navId: string): boolean {

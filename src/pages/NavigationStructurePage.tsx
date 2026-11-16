@@ -1,8 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PersonaNavColumn } from '../navCompare/PersonaNavColumn'
-import { personasInOrder, type PersonaId } from '../navCompare/navData'
+import { personasForNavDesign, type PersonaId } from '../navCompare/navData'
+import { WORKSPACE_DESIGN_PARAM } from '../shared/workspaceNavUrl'
+
+function getNavDesign(searchParams: URLSearchParams): '1' | '2' {
+  return searchParams.get(WORKSPACE_DESIGN_PARAM)?.trim() === '2' ? '2' : '1'
+}
 
 export function NavigationStructurePage() {
+  const [searchParams] = useSearchParams()
+  const design = getNavDesign(searchParams)
+  const personas = useMemo(() => personasForNavDesign(design), [design])
   const [tipOwnerId, setTipOwnerId] = useState<PersonaId | null>(null)
 
   return (
@@ -12,9 +21,9 @@ export function NavigationStructurePage() {
       </header>
 
       <div className="nav-compare__columns">
-        {personasInOrder.map((persona) => (
+        {personas.map((persona) => (
           <PersonaNavColumn
-            key={persona.id}
+            key={`${design}-${persona.id}`}
             config={persona}
             tipActive={tipOwnerId === persona.id}
             onActivate={() => setTipOwnerId(persona.id)}

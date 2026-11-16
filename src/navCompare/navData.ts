@@ -370,3 +370,369 @@ export const personasInOrder: PersonaNavConfig[] = [
   tenantUserNav,
   idpManagerNav,
 ]
+
+/** Design 2 — reorganized IA (Catalog owns templates; Compute owns instances). */
+export const providerAdminNavDesign2: PersonaNavConfig = {
+  id: 'provider-admin',
+  label: 'Provider Admin',
+  activeItem: 'catalog-items',
+  defaultExpanded: ['catalog', 'administration', 'storage', 'networking'],
+  nav: [
+    {
+      kind: 'link',
+      id: 'overview',
+      label: 'Overview',
+      description:
+        'A quick pulse check on the whole platform — what’s healthy, what’s busy, and what needs a look.',
+    },
+    {
+      kind: 'expand',
+      groupId: 'catalog',
+      label: 'Catalog',
+      children: [
+        {
+          id: 'catalog-items',
+          label: 'Catalog items',
+          description:
+            'Build offerings from your master templates and hand them out to tenants.',
+        },
+        {
+          id: 'instance-types',
+          label: 'Instance types',
+          description:
+            'Define the “sizes” tenants can pick from for bare metal and virtual machines — CPUs, memory, GPUs, the works.',
+        },
+        {
+          id: 'disk-images',
+          label: 'Disk images',
+          description:
+            'Curate the OS and disk images people use when they spin up virtual machines.',
+        },
+      ],
+    },
+    {
+      kind: 'expand',
+      groupId: 'administration',
+      label: 'Administration',
+      children: [
+        {
+          id: 'tenants',
+          label: 'Tenants',
+          description:
+            'Onboard organizations, connect their IdP, keep them organized, and make sure billing is hooked up.',
+        },
+        {
+          id: 'secrets',
+          label: 'Secrets',
+          description:
+            'Stash credentials safely in the vault so they can be used at launch without hardcoding them.',
+        },
+      ],
+    },
+    {
+      kind: 'expand',
+      groupId: 'storage',
+      label: 'Storage',
+      children: [
+        {
+          id: 'backends',
+          label: 'Backends',
+          description:
+            'Connect the actual storage systems that power volumes and images underneath.',
+        },
+        {
+          id: 'tiers',
+          label: 'Tiers',
+          description:
+            'Package backends into performance tiers so tenants can pick “fast” vs “cheap” without the plumbing.',
+        },
+      ],
+    },
+    {
+      kind: 'expand',
+      groupId: 'networking',
+      label: 'Networking',
+      children: [
+        {
+          id: 'external-ip-pools',
+          label: 'External IP pools',
+          description:
+            'Manage the shared pools of public IPs that tenants draw from for edge access.',
+        },
+        {
+          id: 'network-class',
+          label: 'Network class',
+          description:
+            'Define network classes tenants can choose when they create virtual networks.',
+        },
+      ],
+    },
+  ],
+}
+
+export const tenantAdminNavDesign2: PersonaNavConfig = {
+  id: 'tenant-admin',
+  label: 'Tenant Admin',
+  activeItem: 'catalog',
+  defaultExpanded: ['compute', 'storage', 'networking', 'administration'],
+  nav: [
+    {
+      kind: 'link',
+      id: 'overview',
+      label: 'Overview',
+      description:
+        'Your tenant at a glance — what’s running, who’s using what, and where to dig in next.',
+    },
+    {
+      kind: 'link',
+      id: 'catalog',
+      label: 'Catalog',
+      description:
+        'Browse published offerings and launch bare metal, clusters, or VMs for your org.',
+    },
+    {
+      kind: 'expand',
+      groupId: 'compute',
+      label: 'Compute',
+      children: [
+        {
+          id: 'bare-metal',
+          label: 'Bare metal',
+          description: 'See and manage the bare metal machines your tenant has provisioned.',
+        },
+        {
+          id: 'clusters',
+          label: 'Clusters',
+          description: 'OpenShift clusters you’ve stood up for the organization — all in one place.',
+        },
+        {
+          id: 'virtual-machines',
+          label: 'Virtual machines',
+          description: 'Filter, open, and keep tabs on the VMs running in your tenant.',
+        },
+      ],
+    },
+    {
+      kind: 'link',
+      id: 'projects',
+      label: 'Projects',
+      description:
+        'Carve work into projects so teams can share resources without stepping on each other.',
+    },
+    {
+      kind: 'expand',
+      groupId: 'storage',
+      label: 'Storage',
+      children: [
+        {
+          id: 'volumes',
+          label: 'Volumes',
+          description:
+            'Create and manage the disks attached to your workloads. Read-only for the dev preview.',
+        },
+      ],
+    },
+    {
+      kind: 'expand',
+      groupId: 'networking',
+      label: 'Networking',
+      children: [
+        {
+          id: 'virtual-networks',
+          label: 'Virtual networks',
+          description: 'Set up private networks your compute instances can talk on.',
+        },
+        {
+          id: 'subnets',
+          label: 'Subnets',
+          description: 'Carve virtual networks into subnets for workloads and isolation.',
+        },
+        {
+          id: 'security-groups',
+          label: 'Security groups',
+          description: 'Control inbound and outbound traffic rules for your instances.',
+        },
+        {
+          id: 'external-ips',
+          label: 'External IPs',
+          description:
+            'Grab public addresses from provider pools when something needs to be reachable outside.',
+        },
+      ],
+    },
+    {
+      kind: 'expand',
+      groupId: 'administration',
+      label: 'Administration',
+      children: [
+        {
+          id: 'roles',
+          label: 'Users',
+          description: 'Decide who can do what — bind people to roles across the tenant.',
+        },
+        {
+          id: 'service-accounts',
+          label: 'Service accounts',
+          description:
+            'Create non-human accounts for CI systems and other automation, with keys and role access.',
+        },
+        {
+          id: 'identity-provider',
+          label: 'Identity provider',
+          description:
+            'Plug in how people sign in — connect your IdP so the right folks get access.',
+        },
+        {
+          id: 'secrets',
+          label: 'Secrets',
+          description:
+            'Store launch credentials in the vault so they’re encrypted and ready when you need them.',
+        },
+        {
+          id: 'activity-log',
+          label: 'Activity log',
+          description: 'A running diary of what happened recently — who did what, and when.',
+        },
+      ],
+    },
+  ],
+}
+
+export const tenantUserNavDesign2: PersonaNavConfig = {
+  id: 'tenant-user',
+  label: 'Tenant User',
+  activeItem: 'catalog',
+  defaultExpanded: ['compute', 'storage', 'networking', 'administration'],
+  nav: [
+    {
+      kind: 'link',
+      id: 'overview',
+      label: 'Overview',
+      description:
+        'Your personal dashboard — a short tour of what you’ve got running and what’s available.',
+    },
+    {
+      kind: 'link',
+      id: 'catalog',
+      label: 'Catalog',
+      description: 'Pick a published offering and launch bare metal, a cluster, or a VM.',
+    },
+    {
+      kind: 'expand',
+      groupId: 'compute',
+      label: 'Compute',
+      children: [
+        {
+          id: 'bare-metal',
+          label: 'Bare metal',
+          description: 'The bare metal instances you own or can work with.',
+        },
+        {
+          id: 'clusters',
+          label: 'Clusters',
+          description: 'Clusters you’ve provisioned or been given access to.',
+        },
+        {
+          id: 'virtual-machines',
+          label: 'Virtual machines',
+          description: 'Your VMs — start, stop, and peek at what’s running.',
+        },
+      ],
+    },
+    {
+      kind: 'link',
+      id: 'projects',
+      label: 'Projects',
+      description: 'Jump into the projects you’re part of to find shared resources.',
+    },
+    {
+      kind: 'expand',
+      groupId: 'storage',
+      label: 'Storage',
+      children: [
+        {
+          id: 'volumes',
+          label: 'Volumes',
+          description: 'Create and manage the disks attached to your workloads.',
+        },
+      ],
+    },
+    {
+      kind: 'expand',
+      groupId: 'networking',
+      label: 'Networking',
+      children: [
+        {
+          id: 'virtual-networks',
+          label: 'Virtual networks',
+          description: 'Networks your instances use to talk to each other privately.',
+        },
+        {
+          id: 'subnets',
+          label: 'Subnets',
+          description: 'Subnets within your virtual networks for workload placement.',
+        },
+        {
+          id: 'security-groups',
+          label: 'Security groups',
+          description: 'Traffic rules that protect the instances you work with.',
+        },
+        {
+          id: 'external-ips',
+          label: 'External IPs',
+          description: 'Public IPs you’ve allocated when something needs outside reach.',
+        },
+      ],
+    },
+    {
+      kind: 'expand',
+      groupId: 'administration',
+      label: 'Administration',
+      children: [
+        {
+          id: 'secrets',
+          label: 'Secrets',
+          description: 'Keep passwords and keys in the vault for use when you launch things.',
+        },
+        {
+          id: 'activity-log',
+          label: 'Activity log',
+          description: 'A running diary of what happened recently — who did what, and when.',
+        },
+      ],
+    },
+  ],
+}
+
+export const idpManagerNavDesign2: PersonaNavConfig = {
+  id: 'idp-manager',
+  label: 'IdP Manager',
+  activeItem: 'identity-provider',
+  defaultExpanded: [],
+  nav: [
+    {
+      kind: 'link',
+      id: 'identity-provider',
+      label: 'Identity provider',
+      description:
+        'Plug in how people sign in — connect your IdP so the right folks get access.',
+    },
+    {
+      kind: 'link',
+      id: 'roles',
+      label: 'Users',
+      description: 'Decide who can do what — bind people to roles across the tenant.',
+    },
+  ],
+}
+
+export const personasInOrderDesign2: PersonaNavConfig[] = [
+  providerAdminNavDesign2,
+  tenantAdminNavDesign2,
+  tenantUserNavDesign2,
+  idpManagerNavDesign2,
+]
+
+export function personasForNavDesign(design: '1' | '2' = '1'): PersonaNavConfig[] {
+  return design === '2' ? personasInOrderDesign2 : personasInOrder
+}
