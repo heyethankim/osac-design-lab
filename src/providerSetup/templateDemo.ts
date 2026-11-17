@@ -409,6 +409,20 @@ export type PublishedTemplatePayload = {
     machineTypeId: string
     nodeCount: number
   }>
+  /**
+   * Cluster as a Service only. Pre-installed operators attached to the catalog item.
+   * `mandatory` cannot be removed by tenants at order time; `optional-default` can
+   * (only when addonOperatorsMode is editable).
+   */
+  addonOperators?: Array<{
+    operatorId: string
+    mode: 'mandatory' | 'optional-default'
+  }>
+  /**
+   * Cluster as a Service only. When `editable`, tenants may add operators at launch.
+   * Defaults to locked when omitted.
+   */
+  addonOperatorsMode?: 'locked' | 'editable'
   /** Locked vs exposed field policies for launch. */
   fieldPolicies?: CatalogFieldPolicy[]
 }

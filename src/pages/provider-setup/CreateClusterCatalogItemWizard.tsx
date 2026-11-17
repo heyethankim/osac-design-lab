@@ -52,8 +52,17 @@ import {
   MAX_CLUSTER_NODE_COUNT,
   MAX_CLUSTER_TOPOLOGY_NODE_SETS,
   MIN_CLUSTER_NODE_COUNT,
+  type CatalogAddonOperatorsMode,
 } from '../../catalog/catalogPublishConfig'
+import {
+  createDefaultClusterAddonOperatorSelections,
+  getClusterAddonOperatorById,
+  getClusterAddonOperatorSelectionModeLabel,
+  type ClusterAddonOperatorCategory,
+  type ClusterAddonOperatorSelection,
+} from '../../catalog/clusterAddonOperators'
 import { CatalogWizardPageShell } from '../../components/catalog/CatalogWizardPageShell'
+import { ClusterAddonOperatorsStep } from '../../components/catalog/ClusterAddonOperatorsStep'
 import { ClusterMachineTypeSelect } from '../../components/catalog/ClusterMachineTypeSelect'
 import { KubernetesResourceNameField } from '../../components/shared/KubernetesResourceNameHelper'
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
@@ -235,6 +244,14 @@ export function CreateClusterCatalogItemWizard({
     createDefaultClusterTopologyRows(),
   )
   const [clusterTopologyEditable, setClusterTopologyEditable] = useState(false)
+  const [addonOperatorsMode, setAddonOperatorsMode] =
+    useState<CatalogAddonOperatorsMode>('locked')
+  const [addonOperatorSelections, setAddonOperatorSelections] = useState<
+    ClusterAddonOperatorSelection[]
+  >(() => createDefaultClusterAddonOperatorSelections())
+  const [addonOperatorFilterQuery, setAddonOperatorFilterQuery] = useState('')
+  const [addonOperatorCategory, setAddonOperatorCategory] =
+    useState<ClusterAddonOperatorCategory>('All Categories')
 
   useEffect(() => {
     if (!isOpen) {
@@ -249,6 +266,10 @@ export function CreateClusterCatalogItemWizard({
     setExpandedClusterVersionIds(new Set())
     setClusterTopologyRows(createDefaultClusterTopologyRows())
     setClusterTopologyEditable(false)
+    setAddonOperatorsMode('locked')
+    setAddonOperatorSelections(createDefaultClusterAddonOperatorSelections())
+    setAddonOperatorFilterQuery('')
+    setAddonOperatorCategory('All Categories')
   }, [isOpen])
 
   useEffect(() => {
@@ -387,6 +408,11 @@ export function CreateClusterCatalogItemWizard({
         name: row.name.trim(),
         machineTypeId: row.machineTypeId,
         nodeCount: row.nodeCount,
+      })),
+      addonOperatorsMode,
+      addonOperators: addonOperatorSelections.map((selection) => ({
+        operatorId: selection.operatorId,
+        mode: selection.mode,
       })),
       nodeSetId: primaryTopologyRow?.name.trim() || undefined,
       nodeSetLabel: primaryTopologyRow?.name.trim() || undefined,
@@ -930,6 +956,55 @@ export function CreateClusterCatalogItemWizard({
         </WizardStep>
 
         <WizardStep
+          id="create-cluster-catalog-step-addon-operators"
+          name="Add-on operators"
+          footer={{
+            nextButtonText: 'Next',
+            onClose,
+          }}
+        >
+          <Form className="create-vm-catalog-wizard__form">
+            <Content component="p" className="create-vm-catalog-wizard__lede">
+              Select one or more operators to pre-install.
+            </Content>
+
+            <FormGroup
+              label="Operators"
+              fieldId="create-cluster-addon-operators"
+              labelInfo={
+                <EditableFieldToggle
+                  id="create-cluster-addon-operators-editable"
+                  isChecked={addonOperatorsMode === 'editable'}
+                  onChange={(checked) => {
+                    setAddonOperatorsMode(checked ? 'editable' : 'locked')
+                    if (!checked) {
+                      setAddonOperatorSelections((current) =>
+                        current.map((selection) => ({
+                          ...selection,
+                          mode: 'mandatory',
+                        })),
+                      )
+                    }
+                  }}
+                />
+              }
+            >
+              <ClusterAddonOperatorsStep
+                clusterVersionId={clusterVersionId}
+                accessMode={addonOperatorsMode}
+                selections={addonOperatorSelections}
+                onSelectionsChange={setAddonOperatorSelections}
+                filterQuery={addonOperatorFilterQuery}
+                onFilterQueryChange={setAddonOperatorFilterQuery}
+                category={addonOperatorCategory}
+                onCategoryChange={setAddonOperatorCategory}
+                clusterVersionStepId="create-cluster-catalog-step-version"
+              />
+            </FormGroup>
+          </Form>
+        </WizardStep>
+
+        <WizardStep
           id="create-cluster-catalog-step-review"
           name="Review"
           footer={{
@@ -983,6 +1058,39 @@ export function CreateClusterCatalogItemWizard({
                   editable={clusterTopologyEditable}
                 />
               ))}
+            </DescriptionList>
+
+            <Title headingLevel="h3" size="md" className="create-vm-catalog-wizard__review-heading">
+              Add-on operators
+            </Title>
+            <DescriptionList isCompact className="create-vm-catalog-wizard__review-list">
+              <DescriptionListGroup>
+                <DescriptionListTerm>Operators</DescriptionListTerm>
+                <DescriptionListDescription>
+                  <span className="create-vm-catalog-wizard__review-value">
+                    {addonOperatorSelections.length === 0 ? (
+                      <span>None</span>
+                    ) : (
+                      <List isPlain>
+                        {addonOperatorSelections.map((selection) => {
+                          const operator = getClusterAddonOperatorById(selection.operatorId)
+                          const name = operator?.name ?? selection.operatorId
+                          return (
+                            <ListItem key={selection.operatorId}>
+                              {name} ({getClusterAddonOperatorSelectionModeLabel(selection.mode)})
+                            </ListItem>
+                          )
+                        })}
+                      </List>
+                    )}
+                    {addonOperatorsMode === 'editable' ? (
+                      <Label color="purple" isCompact>
+                        Editable at provisioning
+                      </Label>
+                    ) : null}
+                  </span>
+                </DescriptionListDescription>
+              </DescriptionListGroup>
             </DescriptionList>
 
             {topologyRateEstimate ? (
