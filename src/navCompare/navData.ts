@@ -488,7 +488,7 @@ export const tenantAdminNavDesign2: PersonaNavConfig = {
       id: 'catalog',
       label: 'Catalog',
       description:
-        'Browse published offerings and launch bare metal, clusters, or VMs for your org.',
+        'Browse published offerings and launch bare metal, clusters, models, or VMs for your org.',
     },
     {
       kind: 'expand',
@@ -504,6 +504,11 @@ export const tenantAdminNavDesign2: PersonaNavConfig = {
           id: 'clusters',
           label: 'Clusters',
           description: 'OpenShift clusters you’ve stood up for the organization — all in one place.',
+        },
+        {
+          id: 'models',
+          label: 'Models',
+          description: 'AI model serving workloads your teams have launched from the catalog.',
         },
         {
           id: 'virtual-machines',

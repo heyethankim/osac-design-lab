@@ -3,8 +3,12 @@ import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { syncWorkspaceCatalogItemParam, syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
 import { useWorkspaceWizardWidth } from '../shared/useWorkspaceWizardWidth'
 import { TenantShell } from '../components/tenant/TenantShell'
-import { DEMO_TENANT_DISPLAY_ADMIN, isDemoTenantId } from '../demoTenant'
-import { TOPIC_MULTI_SERVICE_CATALOG, TOPIC_SERVICE_ACCOUNTS } from '../designHub/topics'
+import { DEMO_TENANT_DISPLAY_ADMIN, isDemoTenantId, type DemoTenantId } from '../demoTenant'
+import {
+  TOPIC_MULTI_SERVICE_CATALOG,
+  TOPIC_SERVICE_ACCOUNTS,
+  TOPIC_TENANT_CONTEXT_SWITCHER,
+} from '../designHub/topics'
 import { PlaceholderTenantAdminPage } from './PlaceholderTenantAdminPage'
 import { ProviderAdminExternalNetworksPage } from './infrastructure/ProviderAdminExternalNetworksPage'
 import { ProviderAdminVirtualNetworksPage } from './infrastructure/ProviderAdminVirtualNetworksPage'
@@ -181,10 +185,10 @@ export function TenantAdminWorkspacePage() {
   const { tenant: tenantParam } = useParams<{ tenant: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   useWorkspaceWizardWidth()
-  const isValidTenant = Boolean(
-    tenantParam && isDemoTenantId(tenantParam) && tenantParam === 'northsummit',
-  )
-  const tenant = 'northsummit' as const
+  const isValidTenant = Boolean(tenantParam && isDemoTenantId(tenantParam))
+  const tenant: DemoTenantId = isDemoTenantId(tenantParam ?? '')
+    ? (tenantParam as DemoTenantId)
+    : 'northsummit'
 
   const [organization, setOrganization] = useState(() => getWorkspaceOrganization(tenant))
   const [activeNavId, setActiveNavId] = useState<TenantAdminNavId>(() =>
@@ -248,15 +252,17 @@ export function TenantAdminWorkspacePage() {
   }
 
   const catalogDraft = getProviderCatalogDraft()
-  const displayName = organization.tenantAdminName ?? DEMO_TENANT_DISPLAY_ADMIN.northsummit
+  const displayName = organization.tenantAdminName ?? DEMO_TENANT_DISPLAY_ADMIN[tenant]
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
   const topicId = searchParams.get('topic')?.trim()
   const designParam = searchParams.get('design')?.trim()
   const isMultiServiceCatalogDesign2 =
     topicId === TOPIC_MULTI_SERVICE_CATALOG && designParam === '2'
+  const isTenantContextSwitcher =
+    topicId === TOPIC_TENANT_CONTEXT_SWITCHER && (designParam === '2' || !designParam)
   const isServiceAccountsDesign2 =
     topicId === TOPIC_SERVICE_ACCOUNTS && designParam === '2'
-  const useDesign2Nav = isMultiServiceCatalogDesign2
+  const useDesign2Nav = isMultiServiceCatalogDesign2 || isTenantContextSwitcher
   const navItems = useMemo((): TenantAdminNavItem[] => {
     if (useDesign2Nav) {
       return getTenantAdminDesign2NavItems()
@@ -508,6 +514,10 @@ export function TenantAdminWorkspacePage() {
       companyLogoSrc={resolveOrganizationCompanyLogo(organization)}
       companyLogoAlt={organization.name}
       organizationSlug={organization.slug}
+      tenantContextSwitcherTopicId={
+        isTenantContextSwitcher ? TOPIC_TENANT_CONTEXT_SWITCHER : undefined
+      }
+      tenantContextWorkspaceSlug={isTenantContextSwitcher ? tenant : undefined}
     >
       <div key={navContentKey}>{renderWorkspaceContent()}</div>
     </TenantShell>

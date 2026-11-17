@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { BarsIcon } from '@patternfly/react-icons/dist/esm/icons/bars-icon'
 import { CogIcon } from '@patternfly/react-icons/dist/esm/icons/cog-icon'
 import { OutlinedQuestionCircleIcon } from '@patternfly/react-icons/dist/esm/icons/outlined-question-circle-icon'
@@ -51,9 +51,12 @@ import {
   isStorageDesign2NavId,
   PROVIDER_ADMIN_DESIGN2_DEFAULT_EXPANDED,
 } from '../../providerAdmin/design2Nav'
+import { TOPIC_TENANT_CONTEXT_SWITCHER } from '../../designHub/topics'
 import { clearProviderOnboardingState } from '../../providerSetup/storage'
 import type { WorkspaceTransition } from '../../providerAdmin/workspace'
+import { getWorkspaceTopicParam } from '../../shared/workspaceNavUrl'
 import { UserPreferencesModal } from '../shared/UserPreferencesModal'
+import { TenantContextSwitcher } from './TenantContextSwitcher'
 import { VertexaCloudMastheadLogo } from './VertexaCloudMastheadLogo'
 
 type ProviderAdminShellProps = {
@@ -90,9 +93,12 @@ export function ProviderAdminShell({
   design = '1',
 }: ProviderAdminShellProps) {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [isPreferencesModalOpen, setIsPreferencesModalOpen] = useState(false)
   const isDesign2 = design === '2'
+  const topicId = getWorkspaceTopicParam(searchParams)
+  const showTenantContextSwitcher = isDesign2 && topicId === TOPIC_TENANT_CONTEXT_SWITCHER
   const design2NavRows = isDesign2 ? getProviderAdminDesign2NavRows() : []
   const [design2Expanded, setDesign2Expanded] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(PROVIDER_ADMIN_DESIGN2_DEFAULT_EXPANDED.map((id) => [id, true])),
@@ -114,7 +120,17 @@ export function ProviderAdminShell({
       </MastheadMain>
 
       <MastheadContent className="provider-admin-masthead-content">
-        <span className="provider-admin-masthead-content__spacer" aria-hidden />
+        {showTenantContextSwitcher ? (
+          <Toolbar ouiaId="provider-admin-masthead-context" className="provider-admin-masthead-context">
+            <ToolbarContent alignItems="center">
+              <ToolbarItem>
+                <TenantContextSwitcher topicId={TOPIC_TENANT_CONTEXT_SWITCHER} />
+              </ToolbarItem>
+            </ToolbarContent>
+          </Toolbar>
+        ) : (
+          <span className="provider-admin-masthead-content__spacer" aria-hidden />
+        )}
 
         <Toolbar ouiaId="provider-admin-masthead-utilities" className="provider-admin-masthead-utilities">
           <ToolbarContent alignItems="center">

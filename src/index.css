@@ -13,7 +13,14 @@ body {
   background-color: var(--pf-t--global--background--color--primary--default);
 }
 
-/* PatternFly 6 masthead logos — brand wraps logo, not the other way around. */
+/* PatternFly 6 masthead logos — brand wraps logo, not the other way around.
+   Keep provider + tenant bars the same height when switching context. */
+.bmaas-app-shell .pf-v6-c-masthead {
+  --bmaas-masthead-logo-max-height: 2.375rem;
+  min-height: 4.3125rem;
+  box-sizing: border-box;
+}
+
 .pf-v6-c-masthead__brand > .pf-v6-c-masthead__logo[class*='-masthead-logo'] {
   display: inline-flex !important;
   align-items: center;
@@ -24,17 +31,18 @@ body {
   min-width: 7rem;
   height: auto;
   min-height: 2rem;
-  max-height: 3.75rem !important;
+  max-height: var(--bmaas-masthead-logo-max-height, 2.375rem) !important;
 }
 
 .pf-v6-c-masthead__brand > .pf-v6-c-masthead__logo[class*='-masthead-logo'] > * {
-  max-height: 3.75rem !important;
+  max-height: var(--bmaas-masthead-logo-max-height, 2.375rem) !important;
 }
 
 .pf-v6-c-masthead .northsummit-masthead-brand,
 .pf-v6-c-masthead .vertexa-masthead-brand,
 .pf-v6-c-masthead .bluesolace-masthead-brand {
   color: var(--pf-t--global--text--color--regular);
+  max-height: var(--bmaas-masthead-logo-max-height, 2.375rem);
 }
 
 /* Form-style dropdowns: rounded rectangle with caret (not pill). */

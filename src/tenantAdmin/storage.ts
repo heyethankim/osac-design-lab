@@ -1,7 +1,6 @@
 import type { TenantAdminNavId } from './constants'
 import { getTenantAdminLeafNavItems } from './constants'
 import {
-  createDemoTenantCatalogGeneralPurposeItem,
   DEMO_TENANT_CATALOG_GENERAL_PURPOSE_ID,
   type TenantCatalogItem,
 } from './catalogItems'
@@ -958,37 +957,24 @@ export function getTenantCatalogItems(slug: string): TenantCatalogItem[] {
   }
 }
 
-/** Seeds the tenant-created general-purpose bare metal catalog item when missing. */
+/**
+ * Tenant-scoped demo catalog items.
+ * Bare-metal general-purpose now lives on the provider catalog so Provider Admin
+ * and Tenant Admin share the same two bare metal offerings — drop the old
+ * tenant-only duplicate if it is still in session storage.
+ */
 export function ensureTenantDemoCatalogItems(slug: string): TenantCatalogItem[] {
   const existing = getTenantCatalogItems(slug)
-  const demoIndex = existing.findIndex((item) => item.id === DEMO_TENANT_CATALOG_GENERAL_PURPOSE_ID)
-
-  if (demoIndex === -1) {
-    const seeded = [createDemoTenantCatalogGeneralPurposeItem(), ...existing]
-    setTenantCatalogItems(slug, seeded)
-    return seeded
-  }
-
-  const current = existing[demoIndex]!
-  const desired = createDemoTenantCatalogGeneralPurposeItem()
-  const needsSync =
-    current.displayName !== desired.displayName ||
-    current.status !== desired.status ||
-    !current.catalogConfig ||
-    current.catalogConfig.instanceTypeId !== desired.catalogConfig?.instanceTypeId ||
-    current.catalogConfig.diskImageId !== desired.catalogConfig?.diskImageId ||
-    current.catalogConfig.hardwareOsMode !== desired.catalogConfig?.hardwareOsMode ||
-    current.catalogConfig.osImageMode !== desired.catalogConfig?.osImageMode
-
-  if (!needsSync) {
-    return existing
-  }
-
-  const updated = existing.map((item) =>
-    item.id === DEMO_TENANT_CATALOG_GENERAL_PURPOSE_ID ? desired : item,
+  const withoutLegacyGeneralPurpose = existing.filter(
+    (item) => item.id !== DEMO_TENANT_CATALOG_GENERAL_PURPOSE_ID,
   )
-  setTenantCatalogItems(slug, updated)
-  return updated
+
+  if (withoutLegacyGeneralPurpose.length !== existing.length) {
+    setTenantCatalogItems(slug, withoutLegacyGeneralPurpose)
+    return withoutLegacyGeneralPurpose
+  }
+
+  return existing
 }
 
 export function setTenantCatalogItems(slug: string, items: TenantCatalogItem[]): void {

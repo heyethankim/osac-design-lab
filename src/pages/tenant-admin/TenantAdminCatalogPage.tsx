@@ -54,7 +54,11 @@ import {
   describeCatalogServiceFilter,
 } from '../../catalog/catalogFilterSummary'
 import { getCatalogViewMode, setCatalogViewMode, type CatalogViewMode } from '../../catalog/viewMode'
-import { TOPIC_MULTI_SERVICE_CATALOG } from '../../designHub/topics'
+import {
+  TOPIC_MULTI_SERVICE_CATALOG,
+  TOPIC_TENANT_CONTEXT_SWITCHER,
+} from '../../designHub/topics'
+import { PillFilterSelect } from '../../components/shared/PillFilterSelect'
 import {
   findCatalogItemByWorkspaceParam,
   getWorkspaceCatalogItemParam,
@@ -124,11 +128,7 @@ function toCatalogDisplayOrderInput(item: TenantCatalogGovernanceItemWithNetwork
 
 const CATALOG_ITEM_CREATE_REVEAL_MS = 1600
 
-type CatalogServiceTabId = 'all' | CatalogServiceId
-
-const ALL_CATALOG_SERVICE_IDS: readonly CatalogServiceId[] = CATALOG_SERVICE_FILTERS.map(
-  (filter) => filter.id,
-)
+type CatalogServiceTabId = CatalogServiceId
 
 type TenantAdminCatalogPageProps = {
   organization: RegisteredOrganization
@@ -265,7 +265,8 @@ function TenantAdminCatalogOriginLine({
 }
 
 function getCatalogLaunchActionLabel(topicId: string | null): string {
-  return topicId === TOPIC_MULTI_SERVICE_CATALOG
+  return topicId === TOPIC_MULTI_SERVICE_CATALOG ||
+    topicId === TOPIC_TENANT_CONTEXT_SWITCHER
     ? 'Provision instance'
     : LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel
 }
@@ -355,7 +356,10 @@ export function TenantAdminCatalogPage({
   const topicId = getWorkspaceTopicParam(searchParams)
   const designParam = searchParams.get(WORKSPACE_DESIGN_PARAM)?.trim()
   const isCatalogDesign2 =
-    topicId === TOPIC_MULTI_SERVICE_CATALOG && designParam === '2'
+    designParam === '2' &&
+    (topicId === TOPIC_MULTI_SERVICE_CATALOG ||
+      topicId === TOPIC_TENANT_CONTEXT_SWITCHER ||
+      !topicId)
   const launchActionLabel = getCatalogLaunchActionLabel(topicId)
   const [catalogItems, setCatalogItems] = useState(() =>
     getTenantCatalogGovernanceItems(organization, catalogDraft),
@@ -366,7 +370,7 @@ export function TenantAdminCatalogPage({
     () => new Set(initialServiceFilters.length > 0 ? initialServiceFilters : ['baremetal']),
   )
   const knownServiceFiltersRef = useRef(new Set(initialServiceFilters))
-  const [activeServiceTab, setActiveServiceTab] = useState<CatalogServiceTabId>('all')
+  const [activeServiceTab, setActiveServiceTab] = useState<CatalogServiceTabId>('baremetal')
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'Live' | 'Unpublished'>('all')
   const [searchValue, setSearchValue] = useState('')
   const [selectedCatalogItem, setSelectedCatalogItem] =
@@ -381,6 +385,14 @@ export function TenantAdminCatalogPage({
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
   const [createInitialServiceId, setCreateInitialServiceId] = useState<CatalogServiceId | null>(
     null,
+  )
+  const publishStatusFilterOptions = useMemo(
+    () => [
+      { value: 'all', label: 'All publish states' },
+      { value: 'Live', label: 'Published' },
+      { value: 'Unpublished', label: 'Unpublished' },
+    ],
+    [],
   )
   const [creatingCatalogItemId, setCreatingCatalogItemId] = useState<string | null>(null)
   const [creatingCardHeightPx, setCreatingCardHeightPx] = useState<number | null>(null)
@@ -462,6 +474,9 @@ export function TenantAdminCatalogPage({
   }, [organization.slug])
 
   const openCreateWizard = (serviceId?: CatalogServiceId) => {
+    if (serviceId) {
+      setActiveServiceTab(serviceId)
+    }
     setCreateInitialServiceId(serviceId ?? null)
     setIsCreateWizardOpen(true)
   }
@@ -482,7 +497,7 @@ export function TenantAdminCatalogPage({
     setSelectedStatus('all')
     setSearchValue('')
     if (isCatalogDesign2) {
-      setActiveServiceTab('all')
+      setActiveServiceTab(payload.serviceId ?? item.catalogConfig?.serviceId ?? 'baremetal')
     }
     beginCatalogItemCreateReveal(item.id)
     return item
@@ -491,9 +506,6 @@ export function TenantAdminCatalogPage({
   const effectiveServiceFilters = useMemo(() => {
     if (!isCatalogDesign2) {
       return selectedFilters
-    }
-    if (activeServiceTab === 'all') {
-      return new Set<CatalogServiceId>(ALL_CATALOG_SERVICE_IDS)
     }
     return new Set<CatalogServiceId>([activeServiceTab])
   }, [activeServiceTab, isCatalogDesign2, selectedFilters])
@@ -578,7 +590,8 @@ export function TenantAdminCatalogPage({
 
   const filterDescriptionParts = useMemo(() => {
     const parts: string[] = []
-    if (!isCatalogDesign2 || activeServiceTab !== 'all') {
+    // Design 2 tabs are navigation, not filters — keep service out of the summary.
+    if (!isCatalogDesign2) {
       const serviceDescription = describeCatalogServiceFilter(
         effectiveServiceFilters,
         catalogServiceIds,
@@ -597,7 +610,6 @@ export function TenantAdminCatalogPage({
     }
     return parts
   }, [
-    activeServiceTab,
     catalogServiceIds,
     effectiveServiceFilters,
     isCatalogDesign2,
@@ -608,16 +620,29 @@ export function TenantAdminCatalogPage({
   const clearAllFilters = () => {
     setSearchValue('')
     setSelectedStatus('all')
-    if (isCatalogDesign2) {
-      setActiveServiceTab('all')
-    } else {
+    if (!isCatalogDesign2) {
       setSelectedFilters(createCatalogServiceFilterSet(catalogServiceIds))
     }
   }
 
+  const resultsSummarySingular = isCatalogDesign2
+    ? `${CATALOG_SERVICE_FILTER_LABELS[activeServiceTab]} catalog item`
+    : 'catalog item'
+  const resultsSummaryPlural = isCatalogDesign2
+    ? `${CATALOG_SERVICE_FILTER_LABELS[activeServiceTab]} catalog items`
+    : undefined
+  const resultsSummaryTotalCount = isCatalogDesign2
+    ? serviceCounts[activeServiceTab]
+    : orderedCatalogItems.length
+  const resultsSummaryClearFilters =
+    filterDescriptionParts.length > 0 ? clearAllFilters : undefined
+
   const hasAnyItems = orderedCatalogItems.length > 0
-  const singleSelectedServiceId =
-    effectiveServiceFilters.size === 1 ? [...effectiveServiceFilters][0]! : null
+  const singleSelectedServiceId = isCatalogDesign2
+    ? activeServiceTab
+    : effectiveServiceFilters.size === 1
+      ? [...effectiveServiceFilters][0]!
+      : null
   const isSingleServiceTrueEmpty =
     hasAnyItems &&
     filteredItems.length === 0 &&
@@ -1059,7 +1084,12 @@ export function TenantAdminCatalogPage({
               <Dropdown
                 isOpen={isCreateMenuOpen}
                 onOpenChange={(isOpen) => setIsCreateMenuOpen(isOpen)}
-                onSelect={() => setIsCreateMenuOpen(false)}
+                onSelect={(_event, value) => {
+                  setIsCreateMenuOpen(false)
+                  if (typeof value === 'string') {
+                    openCreateWizard(value as CatalogServiceId)
+                  }
+                }}
                 popperProps={{ position: 'right' }}
                 toggle={(toggleRef) => (
                   <MenuToggle
@@ -1119,34 +1149,20 @@ export function TenantAdminCatalogPage({
             aria-label="Catalog services"
             className="tenant-admin-catalog-manager__service-tabs"
           >
-            {[
+            {CATALOG_SERVICE_FILTERS.map((service) => (
               <Tab
-                key="all"
-                eventKey="all"
+                key={service.id}
+                eventKey={service.id}
                 title={
                   <TabTitleText>
-                    All
+                    {service.label}
                     <span className="tenant-admin-catalog-manager__tab-count">
-                      {orderedCatalogItems.length}
+                      {serviceCounts[service.id]}
                     </span>
                   </TabTitleText>
                 }
-              />,
-              ...CATALOG_SERVICE_FILTERS.map((service) => (
-                <Tab
-                  key={service.id}
-                  eventKey={service.id}
-                  title={
-                    <TabTitleText>
-                      {service.label}
-                      <span className="tenant-admin-catalog-manager__tab-count">
-                        {serviceCounts[service.id]}
-                      </span>
-                    </TabTitleText>
-                  }
-                />
-              )),
-            ]}
+              />
+            ))}
           </Tabs>
         ) : null}
 
@@ -1160,19 +1176,32 @@ export function TenantAdminCatalogPage({
                   onToggle={handleFilterToggle}
                 />
               ) : null}
-              <FormSelect
-                className="catalog-status-filter"
-                id="tenant-admin-catalog-status-filter"
-                value={selectedStatus}
-                onChange={(_event, value) =>
-                  setSelectedStatus(value as 'all' | 'Live' | 'Unpublished')
-                }
-                aria-label="Filter catalog items by publish status"
-              >
-                <FormSelectOption value="all" label="All publish states" />
-                <FormSelectOption value="Live" label="Published" />
-                <FormSelectOption value="Unpublished" label="Unpublished" />
-              </FormSelect>
+              {isCatalogDesign2 ? (
+                <PillFilterSelect
+                  id="tenant-admin-catalog-status-filter"
+                  className="pill-filter-select--status"
+                  value={selectedStatus}
+                  options={publishStatusFilterOptions}
+                  onChange={(value) =>
+                    setSelectedStatus(value as 'all' | 'Live' | 'Unpublished')
+                  }
+                  ariaLabel="Filter catalog items by publish status"
+                />
+              ) : (
+                <FormSelect
+                  className="catalog-status-filter"
+                  id="tenant-admin-catalog-status-filter"
+                  value={selectedStatus}
+                  onChange={(_event, value) =>
+                    setSelectedStatus(value as 'all' | 'Live' | 'Unpublished')
+                  }
+                  aria-label="Filter catalog items by publish status"
+                >
+                  <FormSelectOption value="all" label="All publish states" />
+                  <FormSelectOption value="Live" label="Published" />
+                  <FormSelectOption value="Unpublished" label="Unpublished" />
+                </FormSelect>
+              )}
               <SearchInput
                 className="catalog-search"
                 placeholder="Search catalog items"
@@ -1208,10 +1237,11 @@ export function TenantAdminCatalogPage({
           <>
             <CatalogFilterResultsSummary
               filteredCount={filteredItems.length}
-              totalCount={orderedCatalogItems.length}
-              singular="catalog item"
+              totalCount={resultsSummaryTotalCount}
+              singular={resultsSummarySingular}
+              plural={resultsSummaryPlural}
               filterParts={filterDescriptionParts}
-              onClearFilters={clearAllFilters}
+              onClearFilters={resultsSummaryClearFilters}
             />
           <div
             ref={catalogCardGridRef}
@@ -1327,10 +1357,11 @@ export function TenantAdminCatalogPage({
           <div className="catalog-table-panel">
             <CatalogFilterResultsSummary
               filteredCount={filteredItems.length}
-              totalCount={orderedCatalogItems.length}
-              singular="catalog item"
+              totalCount={resultsSummaryTotalCount}
+              singular={resultsSummarySingular}
+              plural={resultsSummaryPlural}
               filterParts={filterDescriptionParts}
-              onClearFilters={clearAllFilters}
+              onClearFilters={resultsSummaryClearFilters}
             />
             <Table
               aria-label="Catalog items"

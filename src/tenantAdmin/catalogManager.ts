@@ -27,6 +27,7 @@ import {
 } from '../catalog/catalogSpecs'
 import {
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
+  BARE_METAL_GENERAL_PURPOSE_CATALOG_ITEM_ID,
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   LEGACY_BARE_METAL_GPU_CATALOG_ITEM_ID,
   MODEL_SERVING_CATALOG_ITEM_ID,
@@ -124,6 +125,7 @@ export function getTenantCatalogProjectsLinkLabel(projectCount: number): string 
 
 /** Inherited provider offerings shown on the tenant admin catalog demo. */
 const TENANT_ADMIN_DEMO_PROVIDER_CATALOG_ITEM_IDS = new Set([
+  BARE_METAL_GENERAL_PURPOSE_CATALOG_ITEM_ID,
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
   VM_NETWORK_ATTACHMENTS_CATALOG_ITEM_ID,

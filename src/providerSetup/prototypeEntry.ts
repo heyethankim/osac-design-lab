@@ -43,6 +43,7 @@ import {
   DEFAULT_CATALOG_ITEM_DISPLAY_NAME,
   DEFAULT_RATE_CARD,
   GPU_BLUEPRINT_FORM,
+  PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME,
   SECOND_CATALOG_ITEM_DISPLAY_NAME,
   parseRateCardFromForm,
 } from './templateDemo'
@@ -73,6 +74,12 @@ export const VM_GENERAL_PURPOSE_RATE_CARD = {
 }
 
 /** Stable demo IDs so ensure can re-seed without creating duplicates. */
+export const BARE_METAL_GENERAL_PURPOSE_CATALOG_ITEM_ID =
+  DEMO_CATALOG_ITEM_IDS.bareMetalGeneralPurpose
+export const BARE_METAL_GENERAL_PURPOSE_TEMPLATE_REF_ID = 'bm-dell-r750'
+export const BARE_METAL_GENERAL_PURPOSE_DISPLAY_NAME = PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME
+const BARE_METAL_GENERAL_PURPOSE_INSTANCE_TYPE_ID = 'small'
+
 export const BARE_METAL_GPU_CATALOG_ITEM_ID = 'cat-bm-gpu-training'
 export const BARE_METAL_GPU_TEMPLATE_REF_ID = 'bm-dell-r750'
 export const LEGACY_BARE_METAL_GPU_CATALOG_ITEM_ID = 'cat_BM_GPU_TRAINING'
@@ -93,6 +100,7 @@ export const LEGACY_BARE_METAL_AI_INFERENCE_TEMPLATE_REF_ID = 'bm_hpe_dl380_a100
  * Tenant Admin / Tenant User use the same order with unpublished items filtered out.
  */
 export const DEMO_CATALOG_ITEM_ORDER = [
+  BARE_METAL_GENERAL_PURPOSE_CATALOG_ITEM_ID,
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
@@ -133,6 +141,31 @@ export function sortByDemoCatalogOrder<
 
     return leftIndex - rightIndex
   })
+}
+
+/** Draft helper for Bare Metal general-purpose — matches tenant catalog demo. */
+export function createBareMetalGeneralPurposeCatalogDraft(): ProviderCatalogDraft {
+  return {
+    catalogItemId: BARE_METAL_GENERAL_PURPOSE_CATALOG_ITEM_ID,
+    templateRefId: BARE_METAL_GENERAL_PURPOSE_TEMPLATE_REF_ID,
+    templateName: DEFAULT_BLUEPRINT_FORM.templateName,
+    displayName: BARE_METAL_GENERAL_PURPOSE_DISPLAY_NAME,
+    description: CATALOG_ITEM_DESCRIPTIONS_BY_ID[DEMO_CATALOG_ITEM_IDS.bareMetalGeneralPurpose],
+    scope: 'global-public',
+    rateCard: parseRateCardFromForm(DEFAULT_BLUEPRINT_FORM) ?? DEFAULT_RATE_CARD,
+    serviceId: 'baremetal',
+    instanceTypeId: BARE_METAL_GENERAL_PURPOSE_INSTANCE_TYPE_ID,
+    instanceTypeLabel:
+      formatBaremetalInstanceTypeLabel(BARE_METAL_GENERAL_PURPOSE_INSTANCE_TYPE_ID) ??
+      'Small (16 vCPU · 128 GB · NVIDIA A100 40 GB)',
+    diskImageId: 'rhel-10',
+    diskImageLabel: 'RHEL 10',
+    hardwareOsMode: 'editable',
+    osImageMode: 'editable',
+    networkPolicy: createAllEditableCatalogNetworkPolicy(),
+    status: 'live',
+    createdAt: '2026-08-01T12:00:00.000Z',
+  }
 }
 
 /** Draft helper for Bare Metal GPU Training — used when users create catalog items. */
@@ -281,6 +314,10 @@ function hasCatalogItemId(items: ProviderCatalogDraft[], catalogItemId: string):
   return items.some((item) => item.catalogItemId === catalogItemId)
 }
 
+function hasBareMetalGeneralPurposeCatalogItem(items: ProviderCatalogDraft[]): boolean {
+  return hasCatalogItemId(items, BARE_METAL_GENERAL_PURPOSE_CATALOG_ITEM_ID)
+}
+
 function hasBareMetalGpuCatalogItem(items: ProviderCatalogDraft[]): boolean {
   return (
     hasCatalogItemId(items, BARE_METAL_GPU_CATALOG_ITEM_ID) ||
@@ -314,6 +351,11 @@ export function ensureProviderCatalogDemoItems(): ProviderCatalogDraft[] {
   ensureProviderDemoOrganizations()
 
   let items = getProviderCatalogItems()
+
+  if (!hasBareMetalGeneralPurposeCatalogItem(items)) {
+    addProviderCatalogItem(createBareMetalGeneralPurposeCatalogDraft())
+    items = getProviderCatalogItems()
+  }
 
   if (!hasBareMetalGpuCatalogItem(items)) {
     addProviderCatalogItem(createDefaultCatalogDraft())

@@ -2145,18 +2145,35 @@ export function ProviderSetupPublishCatalogWizard({
               >
                 <Thead>
                   <Tr>
-                    <Th width={25} modifier="nowrap">
+                    <Th
+                      width={30}
+                      modifier="nowrap"
+                      className="provider-setup-template__cluster-node-sets-col-name"
+                    >
                       Name
                     </Th>
-                    <Th width={40}>Machine type</Th>
-                    <Th width={25}>Number of nodes</Th>
+                    <Th
+                      width={35}
+                      className="provider-setup-template__cluster-node-sets-col-machine"
+                    >
+                      Machine type
+                    </Th>
+                    <Th
+                      width={25}
+                      className="provider-setup-template__cluster-node-sets-col-count"
+                    >
+                      Number of nodes
+                    </Th>
                     <Th screenReaderText="Actions" />
                   </Tr>
                 </Thead>
                 <Tbody>
                   {clusterTopologyRows.map((row) => (
                     <Tr key={row.id}>
-                      <Td dataLabel="Name">
+                      <Td
+                        dataLabel="Name"
+                        className="provider-setup-template__cluster-node-sets-col-name"
+                      >
                         <KubernetesResourceNameField
                           id={`publish-catalog-cluster-node-set-name-${row.id}`}
                           value={row.name}
@@ -2166,7 +2183,10 @@ export function ProviderSetupPublishCatalogWizard({
                           isRequired
                         />
                       </Td>
-                      <Td dataLabel="Machine type">
+                      <Td
+                        dataLabel="Machine type"
+                        className="provider-setup-template__cluster-node-sets-col-machine"
+                      >
                         <ClusterMachineTypeSelect
                           id={`publish-catalog-cluster-machine-type-${row.id}`}
                           value={row.machineTypeId}
@@ -2176,7 +2196,10 @@ export function ProviderSetupPublishCatalogWizard({
                           ariaLabel="Machine type"
                         />
                       </Td>
-                      <Td dataLabel="Number of nodes">
+                      <Td
+                        dataLabel="Number of nodes"
+                        className="provider-setup-template__cluster-node-sets-col-count"
+                      >
                         <ClusterNodeCountInput
                           id={`publish-catalog-cluster-node-count-${row.id}`}
                           value={row.nodeCount}

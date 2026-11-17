@@ -7,6 +7,7 @@ const DESIGN2_LEAF_TO_WORKSPACE: Record<string, TenantAdminNavId> = {
   catalog: 'catalog',
   'bare-metal': 'services-baremetal',
   clusters: 'services-clusters',
+  models: 'services-models',
   'virtual-machines': 'services-virtual-machines',
   projects: 'projects-teams',
   volumes: 'storage-volumes',

@@ -95,14 +95,11 @@ import {
   type PublishedTemplatePayload,
   type RateCard,
 } from '../providerSetup/templateDemo'
+import { CreateClusterCatalogItemWizard } from './provider-setup/CreateClusterCatalogItemWizard'
 import { CreateVmCatalogItemWizard } from './provider-setup/CreateVmCatalogItemWizard'
 import { ProviderSetupPublishCatalogWizard } from './provider-setup/ProviderSetupPublishCatalogWizard'
 
-type CatalogServiceTabId = 'all' | CatalogServiceId
-
-const ALL_CATALOG_SERVICE_IDS: readonly CatalogServiceId[] = CATALOG_SERVICE_FILTERS.map(
-  (service) => service.id,
-)
+type CatalogServiceTabId = CatalogServiceId
 
 type ProviderAdminCatalogPageProps = {
   catalogItems: ProviderCatalogDraft[]
@@ -352,7 +349,7 @@ export function ProviderAdminCatalogPage({
   const [selectedFilters, setSelectedFilters] = useState<Set<CatalogServiceId>>(
     () => new Set(initialServiceFilters.length > 0 ? initialServiceFilters : ['baremetal']),
   )
-  const [activeServiceTab, setActiveServiceTab] = useState<CatalogServiceTabId>('all')
+  const [activeServiceTab, setActiveServiceTab] = useState<CatalogServiceTabId>('baremetal')
   const [selectedStatus, setSelectedStatus] = useState<'all' | CatalogItemStatus>('all')
   const [organizationFilter, setOrganizationFilter] = useState('')
   const [viewMode, setViewMode] = useState<CatalogViewMode>(() => getCatalogViewMode('grid'))
@@ -360,6 +357,7 @@ export function ProviderAdminCatalogPage({
   const [organizations, setOrganizations] = useState(() => getProviderRegisteredOrganizations())
   const [isPublishWizardOpen, setIsPublishWizardOpen] = useState(false)
   const [isVmCreateWizardOpen, setIsVmCreateWizardOpen] = useState(false)
+  const [isClusterCreateWizardOpen, setIsClusterCreateWizardOpen] = useState(false)
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<ProviderCatalogDraft | null>(null)
   const [isEditWizardOpen, setIsEditWizardOpen] = useState(false)
@@ -393,8 +391,8 @@ export function ProviderAdminCatalogPage({
     ? (createStepParam as PublishCatalogStepId)
     : null
   const createDesignParam = getWorkspaceDesignParam(searchParams)
-  const createDesignId = createDesignParam ?? WORKSPACE_DESIGN_MULTI_SERVICE
-  // Match Multi-service catalog Design 2 chrome whenever Design 1 is not explicit.
+  // Catalog item creation is Design 2 only (no Design 1 hub tabs).
+  const createDesignId = createDesignParam ?? WORKSPACE_DESIGN_VM_NO_SERVICE
   const isCatalogDesign2 = createDesignParam !== WORKSPACE_DESIGN_MULTI_SERVICE
 
   const uniqueCatalogItems = useMemo(
@@ -511,9 +509,6 @@ export function ProviderAdminCatalogPage({
   const effectiveServiceFilters = useMemo(() => {
     if (!isCatalogDesign2) {
       return selectedFilters
-    }
-    if (activeServiceTab === 'all') {
-      return new Set<CatalogServiceId>(ALL_CATALOG_SERVICE_IDS)
     }
     return new Set<CatalogServiceId>([activeServiceTab])
   }, [activeServiceTab, isCatalogDesign2, selectedFilters])
@@ -654,6 +649,7 @@ export function ProviderAdminCatalogPage({
   const closeCreateWizard = () => {
     setIsPublishWizardOpen(false)
     setIsVmCreateWizardOpen(false)
+    setIsClusterCreateWizardOpen(false)
     setPublishResumeScope('global-public')
     setPublishResumeTenantId('')
     setSearchParams(
@@ -693,7 +689,7 @@ export function ProviderAdminCatalogPage({
       setSelectedStatus('all')
       setSearchValue('')
       if (isCatalogDesign2) {
-        setActiveServiceTab('all')
+        setActiveServiceTab(getDraftServiceId(created))
       }
       beginCatalogItemCreateReveal(created.catalogItemId)
       setIsViewingDetails(false)
@@ -729,6 +725,7 @@ export function ProviderAdminCatalogPage({
     setPublishResumeScope('global-public')
     setPublishResumeTenantId('')
     syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
+    const serviceId = options?.serviceId
     if (options?.syncUrl !== false) {
       setSearchParams(
         (current) => {
@@ -738,9 +735,14 @@ export function ProviderAdminCatalogPage({
           next.set(WORKSPACE_DESIGN_PARAM, designId)
           next.delete(WORKSPACE_STEP_PARAM)
           if (designId === WORKSPACE_DESIGN_VM_NO_SERVICE) {
-            next.delete(WORKSPACE_SERVICE_PARAM)
-          } else if (options?.serviceId) {
-            next.set(WORKSPACE_SERVICE_PARAM, options.serviceId)
+            // Design 2 bare metal omits service; cluster keeps service=cluster.
+            if (serviceId === 'cluster') {
+              next.set(WORKSPACE_SERVICE_PARAM, 'cluster')
+            } else {
+              next.delete(WORKSPACE_SERVICE_PARAM)
+            }
+          } else if (serviceId) {
+            next.set(WORKSPACE_SERVICE_PARAM, serviceId)
           } else {
             next.delete(WORKSPACE_SERVICE_PARAM)
           }
@@ -751,10 +753,23 @@ export function ProviderAdminCatalogPage({
     }
     if (designId === WORKSPACE_DESIGN_MULTI_SERVICE) {
       setIsVmCreateWizardOpen(false)
+      setIsClusterCreateWizardOpen(false)
       setIsPublishWizardOpen(true)
       return
     }
     setIsPublishWizardOpen(false)
+    if (serviceId === 'cluster') {
+      setIsVmCreateWizardOpen(false)
+      setIsClusterCreateWizardOpen(true)
+      return
+    }
+    if (serviceId === 'models' || serviceId === 'virtual-machine') {
+      // Design 2 menu lists these, but create flows are not linked yet.
+      setIsVmCreateWizardOpen(false)
+      setIsClusterCreateWizardOpen(false)
+      return
+    }
+    setIsClusterCreateWizardOpen(false)
     setIsVmCreateWizardOpen(true)
   }
 
@@ -763,7 +778,11 @@ export function ProviderAdminCatalogPage({
       openCreateWizard(WORKSPACE_DESIGN_VM_NO_SERVICE)
       return
     }
-    openCreateWizard(WORKSPACE_DESIGN_MULTI_SERVICE, { serviceId })
+    if (serviceId === 'cluster') {
+      openCreateWizard(WORKSPACE_DESIGN_VM_NO_SERVICE, { serviceId: 'cluster' })
+      return
+    }
+    // Models and Virtual machines stay in the menu but do not open a create flow yet.
   }
 
   useEffect(() => {
@@ -781,15 +800,19 @@ export function ProviderAdminCatalogPage({
 
   useEffect(() => {
     if (actionParam === WORKSPACE_ACTION_CREATE_CATALOG_ITEM) {
-      // Re-run when `design` changes so hub banner Design 1 ↔ Design 2 switches
-      // while a create wizard is already open. URL already has action/design.
-      openCreateWizard(createDesignId, { syncUrl: false })
+      // Re-run when `design` / `service` changes so hub banner Design 1 ↔ Design 2
+      // switches while a create wizard is already open. URL already has action/design.
+      openCreateWizard(createDesignId, {
+        syncUrl: false,
+        serviceId: createInitialServiceId ?? undefined,
+      })
       return
     }
     // Left-nav / Catalog landing cleared create — close any open create wizard.
     setIsPublishWizardOpen(false)
     setIsVmCreateWizardOpen(false)
-  }, [actionParam, createDesignId])
+    setIsClusterCreateWizardOpen(false)
+  }, [actionParam, createDesignId, createInitialServiceId])
 
   useEffect(() => {
     const match = findCatalogItemByWorkspaceParam(orderedCatalogItems, itemParam)
@@ -1000,7 +1023,8 @@ export function ProviderAdminCatalogPage({
 
   const filterDescriptionParts = useMemo(() => {
     const parts: string[] = []
-    if (!isCatalogDesign2 || activeServiceTab !== 'all') {
+    // Design 2 tabs are navigation, not filters — keep service out of the summary.
+    if (!isCatalogDesign2) {
       const serviceDescription = describeCatalogServiceFilter(
         effectiveServiceFilters,
         catalogServiceIds,
@@ -1027,7 +1051,6 @@ export function ProviderAdminCatalogPage({
     }
     return parts
   }, [
-    activeServiceTab,
     catalogServiceIds,
     effectiveServiceFilters,
     isCatalogDesign2,
@@ -1041,18 +1064,26 @@ export function ProviderAdminCatalogPage({
     setSearchValue('')
     setSelectedStatus('all')
     setOrganizationFilter('')
-    if (isCatalogDesign2) {
-      setActiveServiceTab('all')
-    } else {
+    if (!isCatalogDesign2) {
       setSelectedFilters(createCatalogServiceFilterSet(catalogServiceIds))
     }
   }
 
+  const resultsSummarySingular = isCatalogDesign2
+    ? `${CATALOG_SERVICE_FILTER_LABELS[activeServiceTab]} catalog item`
+    : 'catalog item'
+  const resultsSummaryPlural = isCatalogDesign2
+    ? `${CATALOG_SERVICE_FILTER_LABELS[activeServiceTab]} catalog items`
+    : undefined
+  const resultsSummaryTotalCount = isCatalogDesign2
+    ? serviceCounts[activeServiceTab]
+    : orderedCatalogItems.length
+  const resultsSummaryClearFilters =
+    filterDescriptionParts.length > 0 ? clearAllFilters : undefined
+
   const hasAnyItems = orderedCatalogItems.length > 0
   const singleSelectedServiceId = isCatalogDesign2
-    ? activeServiceTab === 'all'
-      ? null
-      : activeServiceTab
+    ? activeServiceTab
     : selectedFilters.size === 1
       ? [...selectedFilters][0]!
       : null
@@ -1134,6 +1165,13 @@ export function ProviderAdminCatalogPage({
       {isVmCreateWizardOpen ? (
         <CreateVmCatalogItemWizard
           isOpen={isVmCreateWizardOpen}
+          organizations={organizations}
+          onClose={closeCreateWizard}
+          onCreateCatalogItem={handleCreatedCatalogItem}
+        />
+      ) : isClusterCreateWizardOpen ? (
+        <CreateClusterCatalogItemWizard
+          isOpen={isClusterCreateWizardOpen}
           organizations={organizations}
           onClose={closeCreateWizard}
           onCreateCatalogItem={handleCreatedCatalogItem}
@@ -1279,34 +1317,20 @@ export function ProviderAdminCatalogPage({
           aria-label="Catalog services"
           className="provider-admin-catalog-items__service-tabs"
         >
-          {[
+          {CATALOG_SERVICE_FILTERS.map((service) => (
             <Tab
-              key="all"
-              eventKey="all"
+              key={service.id}
+              eventKey={service.id}
               title={
                 <TabTitleText>
-                  All
+                  {service.label}
                   <span className="provider-admin-catalog-items__tab-count">
-                    {orderedCatalogItems.length}
+                    {serviceCounts[service.id]}
                   </span>
                 </TabTitleText>
               }
-            />,
-            ...CATALOG_SERVICE_FILTERS.map((service) => (
-              <Tab
-                key={service.id}
-                eventKey={service.id}
-                title={
-                  <TabTitleText>
-                    {service.label}
-                    <span className="provider-admin-catalog-items__tab-count">
-                      {serviceCounts[service.id]}
-                    </span>
-                  </TabTitleText>
-                }
-              />
-            )),
-          ]}
+            />
+          ))}
         </Tabs>
       ) : null}
 
@@ -1371,10 +1395,11 @@ export function ProviderAdminCatalogPage({
         <>
           <CatalogFilterResultsSummary
             filteredCount={filteredCatalogItems.length}
-            totalCount={orderedCatalogItems.length}
-            singular="catalog item"
+            totalCount={resultsSummaryTotalCount}
+            singular={resultsSummarySingular}
+            plural={resultsSummaryPlural}
             filterParts={filterDescriptionParts}
-            onClearFilters={clearAllFilters}
+            onClearFilters={resultsSummaryClearFilters}
           />
         <div
           ref={catalogCardGridRef}
@@ -1498,10 +1523,11 @@ export function ProviderAdminCatalogPage({
         <div className="catalog-table-panel">
           <CatalogFilterResultsSummary
             filteredCount={filteredCatalogItems.length}
-            totalCount={orderedCatalogItems.length}
-            singular="catalog item"
+            totalCount={resultsSummaryTotalCount}
+            singular={resultsSummarySingular}
+            plural={resultsSummaryPlural}
             filterParts={filterDescriptionParts}
-            onClearFilters={clearAllFilters}
+            onClearFilters={resultsSummaryClearFilters}
           />
           <Table
             aria-label="Catalog items"

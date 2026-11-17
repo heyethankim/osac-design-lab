@@ -1,6 +1,7 @@
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
 
 export const DEMO_CATALOG_ITEM_IDS = {
+  bareMetalGeneralPurpose: 'cat-bm-general-purpose',
   bareMetalGpuTraining: 'cat-bm-gpu-training',
   bareMetalDenseGpu: 'cat-bm-dense-gpu',
   clusterNodeSets: 'cat-node-sets-fc430',
@@ -11,6 +12,8 @@ export const DEMO_CATALOG_ITEM_IDS = {
 
 /** User-facing guidance shown on catalog detail pages and demo catalog seeds. */
 export const CATALOG_ITEM_DESCRIPTIONS_BY_ID: Readonly<Record<string, string>> = {
+  [DEMO_CATALOG_ITEM_IDS.bareMetalGeneralPurpose]:
+    'Use this bare metal server when you need dedicated hardware.',
   [DEMO_CATALOG_ITEM_IDS.bareMetalGpuTraining]:
     'Use this server when you need dedicated compute for training or batch jobs.',
   [DEMO_CATALOG_ITEM_IDS.bareMetalDenseGpu]:

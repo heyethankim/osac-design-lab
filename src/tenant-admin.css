@@ -1801,8 +1801,14 @@
   gap: var(--pf-t--global--spacer--sm);
 }
 
+.tenant-admin-catalog-manager {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--lg);
+}
+
 .tenant-admin-catalog-manager__page-header {
-  margin-block-end: var(--pf-t--global--spacer--lg);
+  margin-block-end: 0;
 }
 
 .tenant-admin-catalog-manager__header-actions {
@@ -1877,7 +1883,8 @@
 }
 
 .tenant-admin-catalog-manager__service-tabs.pf-v6-c-tabs {
-  margin-block-end: var(--pf-t--global--spacer--md);
+  margin-block-start: 0;
+  margin-block-end: 0;
 }
 
 .tenant-admin-catalog-manager__tab-count {
@@ -1891,8 +1898,12 @@
   white-space: nowrap;
 }
 
+.tenant-admin-catalog-manager > .catalog-view-toolbar {
+  margin-block: 0;
+}
+
 .tenant-admin-catalog-manager__lede.pf-v6-c-content--p {
-  margin-block-end: var(--pf-t--global--spacer--lg);
+  margin-block-end: 0;
 }
 
 .tenant-admin-catalog-manager__table {

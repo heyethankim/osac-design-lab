@@ -37,6 +37,7 @@ import {
 import type { TenantNavGroup, TenantNavItem } from '../../tenantShell/constants'
 import { flattenTenantNavItems } from '../../tenantShell/constants'
 import { isNorthSummitBankOrganization } from '../../providerAdmin/organizations'
+import { TenantContextSwitcher } from '../provider-admin/TenantContextSwitcher'
 import { UserPreferencesModal } from '../shared/UserPreferencesModal'
 import { BlueSolaceMastheadLogo } from './BlueSolaceMastheadLogo'
 import { NorthsummitBankMastheadLogo } from './NorthsummitBankMastheadLogo'
@@ -58,6 +59,12 @@ type TenantShellProps = {
   organizationSlug?: string
   companyLogoSrc?: string | null
   companyLogoAlt?: string
+  /**
+   * Design Lab tenant-context-switcher topic: keep the masthead switcher visible
+   * so admins can change tenants or return to Provider Admin.
+   */
+  tenantContextSwitcherTopicId?: string
+  tenantContextWorkspaceSlug?: string
 }
 
 const roleLabels: Record<TenantShellRole, string> = {
@@ -81,7 +88,12 @@ export function TenantShell({
   organizationSlug,
   companyLogoSrc = null,
   companyLogoAlt,
+  tenantContextSwitcherTopicId,
+  tenantContextWorkspaceSlug,
 }: TenantShellProps) {
+  const showTenantContextSwitcher = Boolean(
+    tenantContextSwitcherTopicId && tenantContextWorkspaceSlug,
+  )
   const navigate = useNavigate()
   const flattenedNavItems =
     navGroups.length > 0
@@ -203,6 +215,23 @@ export function TenantShell({
       </MastheadMain>
 
       <MastheadContent className="northsummit-masthead-content">
+        {showTenantContextSwitcher ? (
+          <Toolbar
+            ouiaId="tenant-masthead-context"
+            className="tenant-masthead-context"
+          >
+            <ToolbarContent alignItems="center">
+              <ToolbarItem>
+                <TenantContextSwitcher
+                  topicId={tenantContextSwitcherTopicId!}
+                  activeTenantSlug={tenantContextWorkspaceSlug}
+                />
+              </ToolbarItem>
+            </ToolbarContent>
+          </Toolbar>
+        ) : (
+          <span className="northsummit-masthead-content__spacer" aria-hidden />
+        )}
         <Toolbar ouiaId="tenant-masthead-utilities-toolbar" className="northsummit-masthead-utilities-toolbar">
           <ToolbarContent alignItems="center">
             <ToolbarGroup

@@ -175,7 +175,7 @@
 
 .northsummit-masthead-utilities-toolbar.pf-v6-c-toolbar {
   flex-shrink: 0;
-  width: 100%;
+  width: max-content;
   max-width: 100%;
   margin-inline-start: auto;
 }
@@ -256,12 +256,12 @@
   align-items: center;
   width: auto;
   max-width: min(100%, 24rem);
-  max-height: 3.75rem;
+  max-height: var(--bmaas-masthead-logo-max-height, var(--pf-v6-c-masthead__logo--MaxHeight, 2.375rem));
   height: auto;
 }
 
 .pf-v6-c-masthead__main .pf-v6-c-masthead__brand .pf-v6-c-masthead__logo.northsummit-masthead-logo > * {
-  max-height: 3.75rem;
+  max-height: var(--bmaas-masthead-logo-max-height, var(--pf-v6-c-masthead__logo--MaxHeight, 2.375rem));
 }
 
 .northsummit-masthead-brand {
@@ -270,14 +270,15 @@
   align-items: center;
   gap: 0.5rem;
   color: var(--pf-t--global--text--color--regular);
-  max-height: var(--pf-v6-c-masthead__logo--MaxHeight, 3.75rem);
+  max-height: var(--bmaas-masthead-logo-max-height, var(--pf-v6-c-masthead__logo--MaxHeight, 2.375rem));
 }
 
 .northsummit-masthead-brand__svg {
   display: block;
-  height: 3.5rem;
+  height: 2rem;
   width: auto;
   max-width: min(100%, 20rem);
+  max-height: 100%;
 }
 
 .northsummit-masthead-brand__mark {
@@ -334,26 +335,27 @@
   align-items: center;
   width: auto;
   max-width: min(100%, 20rem);
-  max-height: 2.5rem;
+  max-height: var(--bmaas-masthead-logo-max-height, var(--pf-v6-c-masthead__logo--MaxHeight, 2.375rem));
   height: auto;
 }
 
 .pf-v6-c-masthead__main .pf-v6-c-masthead__brand .pf-v6-c-masthead__logo.bluesolace-masthead-logo > * {
-  max-height: 2.5rem;
+  max-height: var(--bmaas-masthead-logo-max-height, var(--pf-v6-c-masthead__logo--MaxHeight, 2.375rem));
 }
 
 .bluesolace-masthead-brand {
   display: flex;
   flex-direction: row;
   align-items: center;
-  max-height: 2.5rem;
+  max-height: var(--bmaas-masthead-logo-max-height, var(--pf-v6-c-masthead__logo--MaxHeight, 2.375rem));
 }
 
 .bluesolace-masthead-brand__img {
   display: block;
-  height: 2.5rem;
+  height: 2rem;
   width: auto;
   max-width: 18rem;
+  max-height: 100%;
   object-fit: contain;
   object-position: left center;
   background: transparent;

@@ -39,7 +39,14 @@ import {
   TOPIC_MULTI_SERVICE_CATALOG,
   TOPIC_NAVIGATION_STRUCTURE,
   TOPIC_SERVICE_ACCOUNTS,
+  TOPIC_TENANT_CONTEXT_SWITCHER,
 } from '../designHub/topics'
+import {
+  buildProviderCreateCatalogItemPath,
+  buildProviderTenantContextSwitcherPath,
+  WORKSPACE_DESIGN_MULTI_SERVICE,
+  WORKSPACE_DESIGN_VM_NO_SERVICE,
+} from '../shared/workspaceNavUrl'
 import {
   getLandingFocusTopicParam,
   LANDING_FOCUS_TOPIC_PARAM,
@@ -156,13 +163,51 @@ const LANDING_TOPICS: TopicCard[] = [
   {
     id: TOPIC_CATALOG_ITEM_CREATION,
     title: 'Catalog item creation flow',
-    description: 'Compare alternative designs for creating a catalog item.',
+    description: 'Create a catalog item as a Provider Admin.',
     status: 'In progress',
     isGoldPattern: true,
     authors: 'Ethan Kim',
     updated: BMAAS_LANDING_LAST_UPDATED,
     personas: ['Provider Admin'],
-    designs: designsForTopic(TOPIC_CATALOG_ITEM_CREATION),
+    designs: [
+      {
+        id: 'bmaas-landing-design-catalog-item-creation-1',
+        label: 'Design 1',
+        to: buildProviderCreateCatalogItemPath({
+          design: WORKSPACE_DESIGN_MULTI_SERVICE,
+          topic: TOPIC_CATALOG_ITEM_CREATION,
+        }),
+      },
+      {
+        id: 'bmaas-landing-design-catalog-item-creation-2',
+        label: 'Design 2',
+        to: buildProviderCreateCatalogItemPath({
+          design: WORKSPACE_DESIGN_VM_NO_SERVICE,
+          topic: TOPIC_CATALOG_ITEM_CREATION,
+        }),
+      },
+    ],
+  },
+  {
+    id: TOPIC_TENANT_CONTEXT_SWITCHER,
+    title: 'Tenant context switcher',
+    description:
+      'Stay in Provider Admin for the catalog and platform, or switch into a tenant context to provision Compute, Projects, and Networking.',
+    status: 'In progress',
+    fixVersion: '0.4',
+    authors: 'Ethan Kim',
+    updated: BMAAS_LANDING_LAST_UPDATED,
+    personas: ['Provider Admin', 'Tenant Admin'],
+    designs: [
+      {
+        id: 'bmaas-landing-design-tenant-context-switcher',
+        label: 'Design',
+        to: buildProviderTenantContextSwitcherPath({
+          topic: TOPIC_TENANT_CONTEXT_SWITCHER,
+          design: '2',
+        }),
+      },
+    ],
   },
   {
     id: TOPIC_FULL_VS_MAX_WIDTH,

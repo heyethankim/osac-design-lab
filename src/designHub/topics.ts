@@ -20,6 +20,7 @@ export const TOPIC_NAVIGATION_STRUCTURE = NAVIGATION_STRUCTURE_TOPIC_ID
 export const TOPIC_SERVICE_ACCOUNTS = 'service-accounts'
 export const TOPIC_EXTERNAL_BILLING_ID = 'external-billing-id'
 export const TOPIC_MULTI_SERVICE_CATALOG = 'multi-service-catalog'
+export const TOPIC_TENANT_CONTEXT_SWITCHER = 'tenant-context-switcher'
 
 export type DesignHubOption = {
   key: string
@@ -105,26 +106,27 @@ export const DESIGN_HUB_TOPIC_OPTIONS: Record<string, readonly DesignHubOption[]
   ],
   [TOPIC_CATALOG_ITEM_CREATION]: [
     {
-      key: WORKSPACE_DESIGN_MULTI_SERVICE,
+      key: '1',
       label: 'Design 1',
       to: buildProviderCreateCatalogItemPath({
         design: WORKSPACE_DESIGN_MULTI_SERVICE,
         topic: TOPIC_CATALOG_ITEM_CREATION,
       }),
-      isCurrent: (_p, s) =>
-        designParamIs(s, WORKSPACE_DESIGN_MULTI_SERVICE) || !s.get(WORKSPACE_DESIGN_PARAM),
+      isCurrent: (_p, s) => designParamIs(s, WORKSPACE_DESIGN_MULTI_SERVICE),
     },
     {
-      key: WORKSPACE_DESIGN_VM_NO_SERVICE,
+      key: '2',
       label: 'Design 2',
       to: buildProviderCreateCatalogItemPath({
         design: WORKSPACE_DESIGN_VM_NO_SERVICE,
-        service: 'virtual-machine',
         topic: TOPIC_CATALOG_ITEM_CREATION,
       }),
-      isCurrent: (_p, s) => designParamIs(s, WORKSPACE_DESIGN_VM_NO_SERVICE),
+      isCurrent: (_p, s) =>
+        designParamIs(s, WORKSPACE_DESIGN_VM_NO_SERVICE) || !s.get(WORKSPACE_DESIGN_PARAM),
     },
   ],
+  // Single design — no hub Design 1/2 tabs.
+  [TOPIC_TENANT_CONTEXT_SWITCHER]: [],
   [TOPIC_FULL_VS_MAX_WIDTH]: [
     {
       key: '1',

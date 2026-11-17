@@ -20,17 +20,9 @@ type ClusterMachineTypeSelectProps = {
   isDisabled?: boolean
 }
 
-function MachineTypeOptionContent({
-  option,
-  variant = 'menu',
-}: {
-  option: CatalogClusterMachineTypeOption
-  variant?: 'menu' | 'toggle'
-}) {
+function MachineTypeOptionContent({ option }: { option: CatalogClusterMachineTypeOption }) {
   return (
-    <span
-      className={`cluster-machine-type-select__option cluster-machine-type-select__option--${variant}`}
-    >
+    <span className="cluster-machine-type-select__option">
       <span className="cluster-machine-type-select__option-label">{option.label}</span>
       <span className="cluster-machine-type-select__option-detail">{option.detail}</span>
     </span>
@@ -81,13 +73,13 @@ export function ClusterMachineTypeSelect({
           className="cluster-machine-type-select__toggle bmaas-dropdown-toggle"
         >
           {selected ? (
-            <MachineTypeOptionContent option={selected} variant="toggle" />
+            <MachineTypeOptionContent option={selected} />
           ) : (
             formatClusterMachineTypeLabel(value)
           )}
         </MenuToggle>
       )}
-      popperProps={{ appendTo: () => document.body }}
+      popperProps={{ appendTo: () => document.body, width: 'trigger', minWidth: 'trigger' }}
     >
       <DropdownList className="cluster-machine-type-select__menu">
         {options.map((option) => (
@@ -97,7 +89,7 @@ export function ClusterMachineTypeSelect({
             isSelected={value === option.id}
             className="cluster-machine-type-select__menu-item"
           >
-            <MachineTypeOptionContent option={option} variant="menu" />
+            <MachineTypeOptionContent option={option} />
           </DropdownItem>
         ))}
       </DropdownList>

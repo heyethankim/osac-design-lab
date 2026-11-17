@@ -490,6 +490,27 @@ export function buildProviderOrganizationsPath(options?: {
   return `/provider/workspace?${params.toString()}`
 }
 
+/** Provider Admin → Catalog with tenant context switcher (Design Lab). */
+export function buildProviderTenantContextSwitcherPath(options?: {
+  topic?: string
+  design?: string
+  fromDesignHub?: boolean
+}): string {
+  const params = new URLSearchParams({
+    nav: 'catalog',
+  })
+  if (options?.fromDesignHub !== false) {
+    params.set(WORKSPACE_HUB_PARAM, WORKSPACE_HUB_VALUE)
+  }
+  if (options?.topic) {
+    params.set(WORKSPACE_TOPIC_PARAM, options.topic)
+  }
+  if (options?.design) {
+    params.set(WORKSPACE_DESIGN_PARAM, options.design)
+  }
+  return `/provider/workspace?${params.toString()}`
+}
+
 /** Open or close a service instance detail via `?instance=`. */
 export function syncWorkspaceInstanceParam(
   setSearchParams: SetURLSearchParams,
