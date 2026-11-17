@@ -1,6 +1,8 @@
 export type ProviderAdminNavId =
   | 'overview'
   | 'catalog'
+  | 'catalog-instance-types'
+  | 'catalog-disk-images'
   | 'services-baremetal'
   | 'services-clusters'
   | 'services-models'
@@ -11,7 +13,10 @@ export type ProviderAdminNavId =
   | 'networking-subnets'
   | 'networking-security-groups'
   | 'networking-external-ip-pools'
+  | 'networking-network-class'
   | 'secrets'
+  | 'storage-backends'
+  | 'storage-tiers'
   | 'infrastructure-data-centers'
   | 'infrastructure-hardware-inventory'
   | 'infrastructure-bmaas-templates'
@@ -75,6 +80,11 @@ export function isOrganizationsNavId(navId: string): boolean {
 export function resolveProviderAdminNavId(navId: ProviderAdminNavId): ProviderAdminNavId {
   if (isServicesNavId(navId) || navId === 'projects-teams') {
     return 'catalog'
+  }
+
+  // Design 2 keeps Network class as its own page; collapse other legacy networking ids.
+  if (navId === 'networking-network-class') {
+    return navId
   }
 
   if (isNetworkingNavId(navId)) {

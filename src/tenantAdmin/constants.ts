@@ -11,6 +11,7 @@ export type TenantAdminNavId =
   | 'administration-service-accounts'
   | 'administration-billing'
   | 'administration-identity-providers'
+  | 'administration-activity-log'
   | 'networking-virtual-networks'
   | 'networking-subnets'
   | 'networking-security-groups'

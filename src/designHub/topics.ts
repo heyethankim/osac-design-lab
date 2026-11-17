@@ -105,23 +105,24 @@ export const DESIGN_HUB_TOPIC_OPTIONS: Record<string, readonly DesignHubOption[]
   ],
   [TOPIC_CATALOG_ITEM_CREATION]: [
     {
-      key: WORKSPACE_DESIGN_VM_NO_SERVICE,
+      key: WORKSPACE_DESIGN_MULTI_SERVICE,
       label: 'Design 1',
+      to: buildProviderCreateCatalogItemPath({
+        design: WORKSPACE_DESIGN_MULTI_SERVICE,
+        topic: TOPIC_CATALOG_ITEM_CREATION,
+      }),
+      isCurrent: (_p, s) =>
+        designParamIs(s, WORKSPACE_DESIGN_MULTI_SERVICE) || !s.get(WORKSPACE_DESIGN_PARAM),
+    },
+    {
+      key: WORKSPACE_DESIGN_VM_NO_SERVICE,
+      label: 'Design 2',
       to: buildProviderCreateCatalogItemPath({
         design: WORKSPACE_DESIGN_VM_NO_SERVICE,
         service: 'virtual-machine',
         topic: TOPIC_CATALOG_ITEM_CREATION,
       }),
       isCurrent: (_p, s) => designParamIs(s, WORKSPACE_DESIGN_VM_NO_SERVICE),
-    },
-    {
-      key: WORKSPACE_DESIGN_MULTI_SERVICE,
-      label: 'Design 2',
-      to: buildProviderCreateCatalogItemPath({
-        design: WORKSPACE_DESIGN_MULTI_SERVICE,
-        topic: TOPIC_CATALOG_ITEM_CREATION,
-      }),
-      isCurrent: (_p, s) => designParamIs(s, WORKSPACE_DESIGN_MULTI_SERVICE),
     },
   ],
   [TOPIC_FULL_VS_MAX_WIDTH]: [

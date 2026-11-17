@@ -43,6 +43,14 @@ import {
   isNetworkingNavId,
   type ProviderAdminNavId,
 } from '../../providerAdmin/constants'
+import {
+  getProviderAdminDesign2NavRows,
+  isAdministrationDesign2NavId,
+  isCatalogDesign2NavId,
+  isNetworkingDesign2NavId,
+  isStorageDesign2NavId,
+  PROVIDER_ADMIN_DESIGN2_DEFAULT_EXPANDED,
+} from '../../providerAdmin/design2Nav'
 import { clearProviderOnboardingState } from '../../providerSetup/storage'
 import type { WorkspaceTransition } from '../../providerAdmin/workspace'
 import { UserPreferencesModal } from '../shared/UserPreferencesModal'
@@ -54,6 +62,23 @@ type ProviderAdminShellProps = {
   activeNavId?: ProviderAdminNavId
   onNavChange?: (navId: ProviderAdminNavId) => void
   workspaceTransition?: WorkspaceTransition
+  /** When `2`, use Navigation structure Design 2 IA. */
+  design?: '1' | '2'
+}
+
+function isDesign2GroupActive(groupId: string, activeNavId: ProviderAdminNavId): boolean {
+  switch (groupId) {
+    case 'catalog':
+      return isCatalogDesign2NavId(activeNavId)
+    case 'administration':
+      return isAdministrationDesign2NavId(activeNavId)
+    case 'storage':
+      return isStorageDesign2NavId(activeNavId)
+    case 'networking':
+      return isNetworkingDesign2NavId(activeNavId)
+    default:
+      return false
+  }
 }
 
 export function ProviderAdminShell({
@@ -62,10 +87,16 @@ export function ProviderAdminShell({
   activeNavId = 'overview',
   onNavChange,
   workspaceTransition = 'idle',
+  design = '1',
 }: ProviderAdminShellProps) {
   const navigate = useNavigate()
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [isPreferencesModalOpen, setIsPreferencesModalOpen] = useState(false)
+  const isDesign2 = design === '2'
+  const design2NavRows = isDesign2 ? getProviderAdminDesign2NavRows() : []
+  const [design2Expanded, setDesign2Expanded] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(PROVIDER_ADMIN_DESIGN2_DEFAULT_EXPANDED.map((id) => [id, true])),
+  )
 
   const header = (
     <Masthead>
@@ -155,56 +186,132 @@ export function ProviderAdminShell({
   const sidebar = showNavigation ? (
     <PageSidebar>
       <PageSidebarBody isFilled>
-        <Nav
-          aria-label="Provider admin"
-          onSelect={(_event, item) => {
-            const navId = resolveProviderAdminNavId(String(item.itemId) as ProviderAdminNavId)
-            onNavChange?.(navId)
-          }}
-        >
-          <NavList>
-            <NavItem
-              itemId="overview"
-              isActive={activeNavId === 'overview'}
-              to="#"
-              preventDefault
-            >
-              Overview
-            </NavItem>
-            <NavItem itemId="catalog" isActive={activeNavId === 'catalog'} to="#" preventDefault>
-              Catalog
-            </NavItem>
-            <NavExpandable
-              id="provider-admin-administration-nav"
-              title="Administration"
-              isExpanded
-              isActive={isAdministrationNavId(activeNavId)}
-            >
-              {PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS.map((item) => (
-                <NavItem
-                  key={item.id}
-                  itemId={item.id}
-                  isActive={activeNavId === item.id}
-                  to="#"
-                  preventDefault
-                >
-                  {item.label}
-                </NavItem>
-              ))}
-            </NavExpandable>
-            <NavItem
-              itemId={PROVIDER_ADMIN_NETWORKING_NAV_ID}
-              isActive={isNetworkingNavId(activeNavId)}
-              to="#"
-              preventDefault
-            >
-              {PROVIDER_ADMIN_NETWORKING_NAV_LABEL}
-            </NavItem>
-            <NavItem itemId="secrets" isActive={activeNavId === 'secrets'} to="#" preventDefault>
-              Secrets
-            </NavItem>
-          </NavList>
-        </Nav>
+        <div className="osac-shell-sidebar-inner">
+          <div className="osac-shell-sidebar-product">
+            <p className="osac-shell-sidebar-product__title">Cloud Extensions</p>
+            <Divider className="osac-shell-sidebar-product__divider" />
+          </div>
+          <Nav
+            className="osac-app-shell-nav"
+            aria-label="Provider admin"
+            onSelect={(_event, item) => {
+              if (isDesign2) {
+                // Design 2 items navigate via onClick so re-selecting the active
+                // Catalog items link still returns to the catalog landing.
+                return
+              }
+              const navId = resolveProviderAdminNavId(String(item.itemId) as ProviderAdminNavId)
+              onNavChange?.(navId)
+            }}
+            onToggle={(_event, item) => {
+              if (!isDesign2) {
+                return
+              }
+              setDesign2Expanded((prev) => ({
+                ...prev,
+                [String(item.groupId)]: item.isExpanded,
+              }))
+            }}
+          >
+            <NavList>
+            {isDesign2
+              ? design2NavRows.map((row) => {
+                  if (row.kind === 'link') {
+                    return (
+                      <NavItem
+                        key={row.id}
+                        itemId={row.id}
+                        isActive={activeNavId === row.id}
+                        to="#"
+                        preventDefault
+                        onClick={() => onNavChange?.(row.id)}
+                      >
+                        {row.label}
+                      </NavItem>
+                    )
+                  }
+
+                  return (
+                    <NavExpandable
+                      key={row.groupId}
+                      id={`provider-admin-${row.groupId}-nav`}
+                      title={row.label}
+                      groupId={row.groupId}
+                      isExpanded={design2Expanded[row.groupId] ?? true}
+                      isActive={isDesign2GroupActive(row.groupId, activeNavId)}
+                    >
+                      {row.children.map((child) => (
+                        <NavItem
+                          key={child.id}
+                          itemId={child.id}
+                          isActive={activeNavId === child.id}
+                          to="#"
+                          preventDefault
+                          onClick={() => onNavChange?.(child.id)}
+                        >
+                          {child.label}
+                        </NavItem>
+                      ))}
+                    </NavExpandable>
+                  )
+                })
+              : (
+                <>
+                  <NavItem
+                    itemId="overview"
+                    isActive={activeNavId === 'overview'}
+                    to="#"
+                    preventDefault
+                  >
+                    Overview
+                  </NavItem>
+                  <NavItem
+                    itemId="catalog"
+                    isActive={activeNavId === 'catalog'}
+                    to="#"
+                    preventDefault
+                  >
+                    Catalog
+                  </NavItem>
+                  <NavExpandable
+                    id="provider-admin-administration-nav"
+                    title="Administration"
+                    isExpanded
+                    isActive={isAdministrationNavId(activeNavId)}
+                  >
+                    {PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS.map((item) => (
+                      <NavItem
+                        key={item.id}
+                        itemId={item.id}
+                        isActive={activeNavId === item.id}
+                        to="#"
+                        preventDefault
+                      >
+                        {item.label}
+                      </NavItem>
+                    ))}
+                  </NavExpandable>
+                  <NavItem
+                    itemId={PROVIDER_ADMIN_NETWORKING_NAV_ID}
+                    isActive={isNetworkingNavId(activeNavId)}
+                    to="#"
+                    preventDefault
+                  >
+                    {PROVIDER_ADMIN_NETWORKING_NAV_LABEL}
+                  </NavItem>
+                  <NavItem
+                    itemId="secrets"
+                    isActive={activeNavId === 'secrets'}
+                    to="#"
+                    preventDefault
+                  >
+                    Secrets
+                  </NavItem>
+                </>
+              )}
+            </NavList>
+          </Nav>
+        </div>
       </PageSidebarBody>
     </PageSidebar>
   ) : undefined

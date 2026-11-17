@@ -139,13 +139,15 @@ const LEGACY_TENANT_ADMIN_NAV_IDS: Record<string, TenantAdminNavId> = {
   services: 'services-baremetal',
   'services-bare-metal': 'services-baremetal',
   'my-instances': 'services-baremetal',
-  'networking-subnets': 'networking-virtual-networks',
-  'networking-security-groups': 'networking-virtual-networks',
 }
 
-const VALID_TENANT_ADMIN_NAV_IDS = new Set<TenantAdminNavId>(
-  getTenantAdminLeafNavItems().map((item) => item.id),
-)
+const VALID_TENANT_ADMIN_NAV_IDS = new Set<TenantAdminNavId>([
+  ...getTenantAdminLeafNavItems().map((item) => item.id),
+  // Design 2 Navigation structure leaves (not in Design 1 sidebar).
+  'networking-subnets',
+  'networking-security-groups',
+  'administration-activity-log',
+])
 
 function normalizeTenantAdminNavId(value: string | null): TenantAdminNavId {
   if (!value) {

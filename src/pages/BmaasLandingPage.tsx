@@ -159,7 +159,6 @@ const LANDING_TOPICS: TopicCard[] = [
     description: 'Compare alternative designs for creating a catalog item.',
     status: 'In progress',
     isGoldPattern: true,
-    hidden: true,
     authors: 'Ethan Kim',
     updated: BMAAS_LANDING_LAST_UPDATED,
     personas: ['Provider Admin'],

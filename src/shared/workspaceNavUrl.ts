@@ -23,11 +23,11 @@ export const WORKSPACE_SERVICE_PARAM = 'service'
 
 /**
  * Query key for catalog-item creation design variants.
- * `1` = VM wizard without Service step; `2` = multi-service wizard with Service.
+ * `1` = multi-service wizard with Service; `2` = VM wizard without Service step.
  */
 export const WORKSPACE_DESIGN_PARAM = 'design'
-export const WORKSPACE_DESIGN_VM_NO_SERVICE = '1'
-export const WORKSPACE_DESIGN_MULTI_SERVICE = '2'
+export const WORKSPACE_DESIGN_MULTI_SERVICE = '1'
+export const WORKSPACE_DESIGN_VM_NO_SERVICE = '2'
 
 /** Query key marking a page opened from the design-topics landing (`hub=1`). */
 export const WORKSPACE_HUB_PARAM = 'hub'

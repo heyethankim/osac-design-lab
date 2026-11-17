@@ -410,6 +410,8 @@ export function isProviderAdminNavId(value: string | null): value is ProviderAdm
   return (
     value === 'overview' ||
     value === 'catalog' ||
+    value === 'catalog-instance-types' ||
+    value === 'catalog-disk-images' ||
     value === 'services-baremetal' ||
     value === 'services-clusters' ||
     value === 'services-models' ||
@@ -423,7 +425,10 @@ export function isProviderAdminNavId(value: string | null): value is ProviderAdm
     value === 'networking-subnets' ||
     value === 'networking-security-groups' ||
     value === 'networking-external-ip-pools' ||
+    value === 'networking-network-class' ||
     value === 'secrets' ||
+    value === 'storage-backends' ||
+    value === 'storage-tiers' ||
     value === 'administration-organizations' ||
     value === 'administration-billing' ||
     value === 'administration-rate-cards' ||

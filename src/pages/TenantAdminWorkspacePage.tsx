@@ -4,7 +4,7 @@ import { syncWorkspaceCatalogItemParam, syncWorkspaceNavParam } from '../shared/
 import { useWorkspaceWizardWidth } from '../shared/useWorkspaceWizardWidth'
 import { TenantShell } from '../components/tenant/TenantShell'
 import { DEMO_TENANT_DISPLAY_ADMIN, isDemoTenantId } from '../demoTenant'
-import { TOPIC_SERVICE_ACCOUNTS } from '../designHub/topics'
+import { TOPIC_MULTI_SERVICE_CATALOG, TOPIC_SERVICE_ACCOUNTS } from '../designHub/topics'
 import { PlaceholderTenantAdminPage } from './PlaceholderTenantAdminPage'
 import { ProviderAdminExternalNetworksPage } from './infrastructure/ProviderAdminExternalNetworksPage'
 import { ProviderAdminVirtualNetworksPage } from './infrastructure/ProviderAdminVirtualNetworksPage'
@@ -22,6 +22,11 @@ import {
   type TenantAdminNavId,
   type TenantAdminNavItem,
 } from '../tenantAdmin/constants'
+import {
+  getTenantAdminDesign2NavItems,
+  getTenantAdminDesign2PlaceholderCopy,
+  isTenantAdminDesign2PlaceholderNavId,
+} from '../tenantAdmin/design2Nav'
 import { getWorkspaceOrganization } from '../tenantAdmin/organizations'
 import { resolveOrganizationCompanyLogo } from '../providerAdmin/organizations'
 import {
@@ -90,7 +95,10 @@ function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
     value === 'administration-service-accounts' ||
     value === 'administration-billing' ||
     value === 'administration-identity-providers' ||
+    value === 'administration-activity-log' ||
     value === 'networking-virtual-networks' ||
+    value === 'networking-subnets' ||
+    value === 'networking-security-groups' ||
     value === 'networking-external-ip-pools' ||
     value === 'secrets'
   )
@@ -108,9 +116,6 @@ function normalizeTenantAdminNavParam(value: string | null): TenantAdminNavId | 
   }
   if (value === 'services' || value === 'my-instances' || value === 'instances') {
     return 'services-baremetal'
-  }
-  if (value === 'networking-subnets' || value === 'networking-security-groups') {
-    return 'networking-virtual-networks'
   }
   return null
 }
@@ -245,10 +250,17 @@ export function TenantAdminWorkspacePage() {
   const catalogDraft = getProviderCatalogDraft()
   const displayName = organization.tenantAdminName ?? DEMO_TENANT_DISPLAY_ADMIN.northsummit
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
+  const topicId = searchParams.get('topic')?.trim()
+  const designParam = searchParams.get('design')?.trim()
+  const isMultiServiceCatalogDesign2 =
+    topicId === TOPIC_MULTI_SERVICE_CATALOG && designParam === '2'
   const isServiceAccountsDesign2 =
-    searchParams.get('topic')?.trim() === TOPIC_SERVICE_ACCOUNTS &&
-    searchParams.get('design')?.trim() === '2'
+    topicId === TOPIC_SERVICE_ACCOUNTS && designParam === '2'
+  const useDesign2Nav = isMultiServiceCatalogDesign2
   const navItems = useMemo((): TenantAdminNavItem[] => {
+    if (useDesign2Nav) {
+      return getTenantAdminDesign2NavItems()
+    }
     if (!isServiceAccountsDesign2) {
       return [...TENANT_ADMIN_NAV_ITEMS]
     }
@@ -263,7 +275,7 @@ export function TenantAdminWorkspacePage() {
         ),
       }
     })
-  }, [isServiceAccountsDesign2])
+  }, [isServiceAccountsDesign2, useDesign2Nav])
 
   const handleProjectScopeChange = (scopeId: ProjectScopeId) => {
     setProjectScopeIdState(scopeId)
@@ -338,6 +350,18 @@ export function TenantAdminWorkspacePage() {
   }
 
   const renderWorkspaceContent = () => {
+    if (useDesign2Nav && isTenantAdminDesign2PlaceholderNavId(activeNavId)) {
+      const design2Placeholder = getTenantAdminDesign2PlaceholderCopy(activeNavId)
+      if (design2Placeholder) {
+        return (
+          <PlaceholderTenantAdminPage
+            title={design2Placeholder.title}
+            description={design2Placeholder.description}
+          />
+        )
+      }
+    }
+
     const placeholder = TENANT_ADMIN_PLACEHOLDER_PAGES[activeNavId]
     if (placeholder) {
       return (
@@ -425,9 +449,9 @@ export function TenantAdminWorkspacePage() {
           <TenantAdminAdministratorsPage
             organization={organization}
             onOrganizationChange={setOrganization}
-            title={isServiceAccountsDesign2 ? 'Users' : undefined}
+            title={isServiceAccountsDesign2 || useDesign2Nav ? 'Users' : undefined}
             lede={
-              isServiceAccountsDesign2
+              isServiceAccountsDesign2 || useDesign2Nav
                 ? 'Manage human users and their tenant access for your organization.'
                 : undefined
             }

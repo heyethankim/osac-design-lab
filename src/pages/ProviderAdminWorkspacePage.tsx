@@ -10,6 +10,10 @@ import { ProviderAdminShell } from '../components/provider-admin/ProviderAdminSh
 import { ProviderSetupWizardPanel } from '../components/provider-setup/ProviderSetupWizardPanel'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
 import { resolveProviderAdminNavId } from '../providerAdmin/constants'
+import {
+  getDesign2PlaceholderCopy,
+  isDesign2PlaceholderNavId,
+} from '../providerAdmin/design2Nav'
 import { ProviderAdminCatalogPage } from './ProviderAdminCatalogPage'
 import { ProviderAdminOverviewPage } from './ProviderAdminOverviewPage'
 import { ProviderAdminBmaasTemplatesPage } from './infrastructure/ProviderAdminBmaasTemplatesPage'
@@ -90,6 +94,10 @@ export function ProviderAdminWorkspacePage() {
   const catalogEditLeaveAttemptRef = useRef<((onConfirmed: () => void) => void) | null>(null)
 
   const navParam = searchParams.get('nav')
+  const designParam = searchParams.get('design')?.trim()
+  // Design 2 (Navigation structure) is the default Provider Admin shell for Catalog.
+  // Explicit `design=1` keeps the legacy flat nav for Design 1 hub topics.
+  const design: '1' | '2' = designParam === '1' ? '1' : '2'
 
   useLayoutEffect(() => {
     const requestedNav = normalizeProviderNavParam(navParam)
@@ -259,6 +267,18 @@ export function ProviderAdminWorkspacePage() {
   const renderPostSetupContent = () => {
     const resolvedActiveNavId = resolveProviderAdminNavId(activeNavId)
 
+    if (isDesign2PlaceholderNavId(resolvedActiveNavId)) {
+      const placeholder = getDesign2PlaceholderCopy(resolvedActiveNavId)
+      if (placeholder) {
+        return (
+          <PlaceholderProviderAdminPage
+            title={placeholder.title}
+            description={placeholder.description}
+          />
+        )
+      }
+    }
+
     switch (resolvedActiveNavId) {
       case 'catalog':
         return (
@@ -346,6 +366,7 @@ export function ProviderAdminWorkspacePage() {
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
       workspaceTransition={workspaceTransition}
+      design={design}
     >
       {renderWorkspaceContent()}
     </ProviderAdminShell>

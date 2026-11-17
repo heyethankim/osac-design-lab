@@ -1,5 +1,5 @@
 import {
-  Button,
+  Alert,
   Content,
   DescriptionList,
   DescriptionListDescription,
@@ -10,38 +10,35 @@ import {
   DropdownList,
   Form,
   FormGroup,
-  FormHelperText,
   FormSelect,
   FormSelectOption,
-  HelperText,
-  HelperTextItem,
   Label,
   MenuToggle,
   Switch,
   TextArea,
-  TextInput,
   Title,
   Wizard,
   WizardStep,
 } from '@patternfly/react-core'
-import { CubesIcon } from '@patternfly/react-icons/dist/esm/icons/cubes-icon'
 import { LinuxIcon } from '@patternfly/react-icons/dist/esm/icons/linux-icon'
-import { MinusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/minus-circle-icon'
-import { PlusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/plus-circle-icon'
 import { RedhatIcon } from '@patternfly/react-icons/dist/esm/icons/redhat-icon'
-import { RhStandardCodeIcon } from '@patternfly/react-icons/dist/esm/icons/rh-standard-code-icon'
 import { RhStandardGlobeAbstractIcon } from '@patternfly/react-icons/dist/esm/icons/rh-standard-globe-abstract-icon'
-import { RhStandardKeyIcon } from '@patternfly/react-icons/dist/esm/icons/rh-standard-key-icon'
 import { RhStandardOfficeIcon } from '@patternfly/react-icons/dist/esm/icons/rh-standard-office-icon'
 import { WindowsIcon } from '@patternfly/react-icons/dist/esm/icons/windows-icon'
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   DEFAULT_M360_RATE_CARD_ID,
   findM360OsLicenseRateLine,
+  findM360RateLineForPublishSelection,
   formatBareMetalOsLicenseRateLabel,
+  formatM360RateLineHourly,
+  formatM360RateLineMonthly,
+  formatM360RateLineSummary,
+  getM360RateCardDisplayName,
 } from '../../billing/m360RateLines'
 import {
   getCatalogDiskImageOptions,
+  getCatalogInstanceTypeOptions,
   isRedHatBrandedDiskImageLabel,
 } from '../../catalog/catalogPublishConfig'
 import { CatalogWizardPageShell } from '../../components/catalog/CatalogWizardPageShell'
@@ -55,10 +52,8 @@ import {
 import { isValidKubernetesResourceName } from '../../shared/kubernetesResourceName'
 
 type VmScope = 'global' | 'tenant'
-type GuestOs = 'linux' | 'windows' | 'unspecified'
-type CloudInitSource = 'enter-value' | 'select-secret'
 
-const DEFAULT_VM_CATALOG_NAME = 'general-purpose-rhel-vm'
+const DEFAULT_BARE_METAL_CATALOG_NAME = 'bare-metal-general-purpose-server'
 
 const DISK_IMAGES = [
   ...getCatalogDiskImageOptions().map((option) => ({
@@ -75,71 +70,28 @@ const DISK_IMAGES = [
   },
 ]
 
-const INSTANCE_TYPES = [
-  {
-    id: 'vm-type-1-small',
-    label: 'Small',
-    vcpus: '1 vCPU',
-    memory: '2 GiB',
-    gpu: '–',
-    rate: '$1.20/hr',
-  },
-  {
-    id: 'vm-type-1-medium',
-    label: 'Medium',
-    vcpus: '2 vCPUs',
-    memory: '10 GiB',
-    gpu: '–',
-    rate: '$2.40/hr',
-  },
-  {
-    id: 'vm-type-1-large',
-    label: 'Large',
-    vcpus: '4 vCPUs',
-    memory: '16 GiB',
-    gpu: '–',
-    rate: '$4.80/hr',
-  },
-  {
-    id: 'vm-type-1-gpu-small',
-    label: 'GPU Small',
-    vcpus: '4 vCPUs',
-    memory: '16 GiB',
-    gpu: '1 GPU',
-    rate: '$6.40/hr',
-  },
-  {
-    id: 'vm-type-1-gpu-large',
-    label: 'GPU Large',
-    vcpus: '8 vCPUs',
-    memory: '32 GiB',
-    gpu: '2 GPU',
-    rate: '$12.80/hr',
-  },
-]
+/** Bare metal OS cards for Design 2 Hardware (Linux images only). */
+const BARE_METAL_OS_OPTIONS = DISK_IMAGES.filter((image) => image.os === 'linux')
 
-const BOOT_STORAGE_TIERS = [
-  {
-    id: 'balanced',
-    label: 'Balanced',
-    description: 'General-purpose SSD for most virtual machines',
-  },
-  {
-    id: 'performance',
-    label: 'Performance',
-    description: 'High IOPS for databases and latency-sensitive workloads',
-  },
-  {
-    id: 'capacity',
-    label: 'Capacity',
-    description: 'Lower cost, higher density for bulk and archival data',
-  },
-  {
-    id: 'ai-ml-optimized',
-    label: 'AI/ML optimized',
-    description: 'Throughput-optimized tier for training and inference datasets',
-  },
-] as const
+const INSTANCE_TYPES = getCatalogInstanceTypeOptions('baremetal').map((option) => {
+  const rateLine = findM360RateLineForPublishSelection(
+    'baremetal',
+    option.id,
+    DEFAULT_M360_RATE_CARD_ID,
+  )
+  return {
+    id: option.id,
+    label: option.label,
+    detail: option.detail,
+    accelerator: option.accelerator ?? '',
+    rate: rateLine
+      ? formatM360RateLineSummary(rateLine)
+      : option.hourlyRate ?? 'No M360 rate line',
+    hourlyRate: rateLine?.hourlyRate ?? 0,
+    monthlyRate: rateLine?.monthlyRate ?? 0,
+  }
+})
+
 const AUTOMATION_TEMPLATES = [
   { id: 'ocp-virt-rhel-vm', label: 'ocp-virt-rhel-vm' },
   { id: 'ocp-virt-gpu-vm', label: 'ocp-virt-gpu-vm' },
@@ -147,31 +99,10 @@ const AUTOMATION_TEMPLATES = [
 ] as const
 const DEFAULT_AUTOMATION_TEMPLATE_ID = AUTOMATION_TEMPLATES[0].id
 
-const DEFAULT_GUEST_OS: GuestOs = 'linux'
 const DEFAULT_DISK_IMAGE_ID = DISK_IMAGES.find((image) => image.os === 'linux')?.id ?? 'rhel-10'
-const DEFAULT_INSTANCE_TYPE_ID = 'vm-type-1-medium'
-const DEFAULT_BOOT_DISK_SIZE = '120'
-const DEFAULT_BOOT_STORAGE_TIER = BOOT_STORAGE_TIERS[0].id
+const DEFAULT_INSTANCE_TYPE_ID = INSTANCE_TYPES[0]?.id ?? 'small'
 const DEFAULT_DESCRIPTION =
-  'General-purpose Linux virtual machine for development and application workloads.'
-const DEFAULT_CLOUD_INIT = `#cloud-config
-users:
-  - name: cloud-user
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    shell: /bin/bash
-packages:
-  - git
-  - curl
-runcmd:
-  - echo "VM catalog item ready" > /etc/motd
-`
-
-function defaultDiskImageForGuestOs(guestOs: GuestOs): string {
-  if (guestOs === 'windows') {
-    return DISK_IMAGES.find((image) => image.os === 'windows')?.id ?? 'windows-server-2022'
-  }
-  return DISK_IMAGES.find((image) => image.os === 'linux')?.id ?? DEFAULT_DISK_IMAGE_ID
-}
+  'Use this bare metal server when you need dedicated hardware.'
 
 function resolveVmOsLicenseRateLabel(diskImageId: string): string {
   const line = findM360OsLicenseRateLine(diskImageId, DEFAULT_M360_RATE_CARD_ID)
@@ -187,10 +118,6 @@ function resolveVmOsLicenseRateLabel(diskImageId: string): string {
 
 type DiskImageOption = (typeof DISK_IMAGES)[number]
 
-function diskImageOptionLabel(image: DiskImageOption): string {
-  return `${image.label} · ${resolveVmOsLicenseRateLabel(image.id)}`
-}
-
 function diskImageOptionIcon(image: DiskImageOption): ReactNode {
   if (image.os === 'windows') {
     return <WindowsIcon />
@@ -201,101 +128,12 @@ function diskImageOptionIcon(image: DiskImageOption): ReactNode {
   return <LinuxIcon />
 }
 
-function DiskImageOptionContent({
-  image,
-  variant = 'menu',
-}: {
-  image: DiskImageOption
-  variant?: 'menu' | 'toggle'
-}) {
-  return (
-    <span
-      className={`create-vm-disk-image-select__option create-vm-disk-image-select__option--${variant}`}
-    >
-      <span className="create-vm-disk-image-select__icon" aria-hidden>
-        {diskImageOptionIcon(image)}
-      </span>
-      <span className="create-vm-disk-image-select__copy">
-        <Title
-          headingLevel="h3"
-          size="md"
-          className="provider-setup-template__select-card-title create-vm-disk-image-select__label"
-        >
-          {image.label}
-        </Title>
-        <span className="create-vm-disk-image-select__detail">
-          {image.detail} · {resolveVmOsLicenseRateLabel(image.id)}
-        </span>
-      </span>
-    </span>
-  )
-}
-
-function DiskImageSelect({
-  id,
-  value,
-  options,
-  onChange,
-}: {
-  id: string
-  value: string
-  options: DiskImageOption[]
-  onChange: (diskImageId: string) => void
-}) {
-  const [isOpen, setIsOpen] = useState(false)
-  const selected = options.find((image) => image.id === value) ?? options[0] ?? null
-
-  return (
-    <Dropdown
-      isOpen={isOpen}
-      onOpenChange={setIsOpen}
-      onSelect={(_event, selectedValue) => {
-        if (selectedValue == null) {
-          return
-        }
-        onChange(String(selectedValue))
-        setIsOpen(false)
-      }}
-      toggle={(toggleRef) => (
-        <MenuToggle
-          ref={toggleRef}
-          id={id}
-          isExpanded={isOpen}
-          onClick={() => setIsOpen((open) => !open)}
-          aria-label="Disk image"
-          className="create-vm-disk-image-select__toggle bmaas-dropdown-toggle"
-        >
-          {selected ? (
-            <DiskImageOptionContent image={selected} variant="toggle" />
-          ) : (
-            'Select a disk image'
-          )}
-        </MenuToggle>
-      )}
-      popperProps={{ appendTo: () => document.body, width: 'trigger' }}
-    >
-      <DropdownList className="create-vm-disk-image-select__menu">
-        {options.map((image) => (
-          <DropdownItem
-            key={image.id}
-            value={image.id}
-            isSelected={value === image.id}
-            className="create-vm-disk-image-select__menu-item"
-          >
-            <DiskImageOptionContent image={image} variant="menu" />
-          </DropdownItem>
-        ))}
-      </DropdownList>
-    </Dropdown>
-  )
-}
-
 type InstanceTypeOption = (typeof INSTANCE_TYPES)[number]
 
 function instanceTypeDetail(type: InstanceTypeOption): string {
-  const parts = [type.vcpus, type.memory]
-  if (type.gpu && type.gpu !== '–') {
-    parts.push(type.gpu)
+  const parts = [type.detail]
+  if (type.accelerator) {
+    parts.push(type.accelerator)
   }
   parts.push(type.rate)
   return parts.join(' · ')
@@ -362,99 +200,6 @@ function InstanceTypeSelect({
             className="create-vm-instance-type-select__menu-item"
           >
             <InstanceTypeOptionContent type={type} />
-          </DropdownItem>
-        ))}
-      </DropdownList>
-    </Dropdown>
-  )
-}
-
-type StorageTierOption = (typeof BOOT_STORAGE_TIERS)[number]
-
-type AdditionalDisk = {
-  id: string
-  sizeGiB: string
-  sizeEditable: boolean
-  storageTierId: string
-  storageEditable: boolean
-}
-
-const DEFAULT_ADDITIONAL_DISK_SIZE = '30'
-
-function createAdditionalDisk(): AdditionalDisk {
-  return {
-    id: `disk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    sizeGiB: DEFAULT_ADDITIONAL_DISK_SIZE,
-    sizeEditable: false,
-    storageTierId: DEFAULT_BOOT_STORAGE_TIER,
-    storageEditable: false,
-  }
-}
-
-function StorageTierOptionContent({ tier }: { tier: StorageTierOption }) {
-  return (
-    <span className="create-vm-instance-type-select__option">
-      <Title
-        headingLevel="h3"
-        size="md"
-        className="provider-setup-template__select-card-title create-vm-instance-type-select__label"
-      >
-        {tier.label}
-      </Title>
-      <span className="create-vm-instance-type-select__detail">{tier.description}</span>
-    </span>
-  )
-}
-
-function StorageTierSelect({
-  id,
-  value,
-  onChange,
-  ariaLabel = 'Boot storage tier',
-}: {
-  id: string
-  value: string
-  onChange: (storageTierId: string) => void
-  ariaLabel?: string
-}) {
-  const [isOpen, setIsOpen] = useState(false)
-  const selected =
-    BOOT_STORAGE_TIERS.find((tier) => tier.id === value) ?? BOOT_STORAGE_TIERS[0] ?? null
-
-  return (
-    <Dropdown
-      isOpen={isOpen}
-      onOpenChange={setIsOpen}
-      onSelect={(_event, selectedValue) => {
-        if (selectedValue == null) {
-          return
-        }
-        onChange(String(selectedValue))
-        setIsOpen(false)
-      }}
-      toggle={(toggleRef) => (
-        <MenuToggle
-          ref={toggleRef}
-          id={id}
-          isExpanded={isOpen}
-          onClick={() => setIsOpen((open) => !open)}
-          aria-label={ariaLabel}
-          className="create-vm-instance-type-select__toggle bmaas-dropdown-toggle"
-        >
-          {selected ? <StorageTierOptionContent tier={selected} /> : 'Select boot storage tier'}
-        </MenuToggle>
-      )}
-      popperProps={{ appendTo: () => document.body, width: 'trigger' }}
-    >
-      <DropdownList className="create-vm-instance-type-select__menu">
-        {BOOT_STORAGE_TIERS.map((tier) => (
-          <DropdownItem
-            key={tier.id}
-            value={tier.id}
-            isSelected={value === tier.id}
-            className="create-vm-instance-type-select__menu-item"
-          >
-            <StorageTierOptionContent tier={tier} />
           </DropdownItem>
         ))}
       </DropdownList>
@@ -589,32 +334,25 @@ export function CreateVmCatalogItemWizard({
   onClose,
   onCreateCatalogItem,
 }: CreateVmCatalogItemWizardProps) {
-  const [scope, setScope] = useState<VmScope>('tenant')
+  const [scope, setScope] = useState<VmScope>('global')
   const [tenantId, setTenantId] = useState('')
-  const [name, setName] = useState(DEFAULT_VM_CATALOG_NAME)
+  const [name, setName] = useState(DEFAULT_BARE_METAL_CATALOG_NAME)
   const [automationTemplateId, setAutomationTemplateId] = useState<string>(
     DEFAULT_AUTOMATION_TEMPLATE_ID,
   )
   const [description, setDescription] = useState(DEFAULT_DESCRIPTION)
-  const [guestOs, setGuestOs] = useState<GuestOs>(DEFAULT_GUEST_OS)
   const [diskImageId, setDiskImageId] = useState(DEFAULT_DISK_IMAGE_ID)
   const [diskImageEditable, setDiskImageEditable] = useState(false)
   const [instanceTypeId, setInstanceTypeId] = useState(DEFAULT_INSTANCE_TYPE_ID)
   const [instanceTypeEditable, setInstanceTypeEditable] = useState(false)
-  const [bootDiskSize, setBootDiskSize] = useState(DEFAULT_BOOT_DISK_SIZE)
-  const [bootDiskEditable, setBootDiskEditable] = useState(false)
-  const [bootStorageTier, setBootStorageTier] = useState<string>(DEFAULT_BOOT_STORAGE_TIER)
-  const [bootStorageEditable, setBootStorageEditable] = useState(false)
-  const [additionalDisks, setAdditionalDisks] = useState<AdditionalDisk[]>([])
-  const [cloudInitEditable, setCloudInitEditable] = useState(false)
-  const [cloudInitSource, setCloudInitSource] = useState<CloudInitSource>('enter-value')
-  const [cloudInitValue, setCloudInitValue] = useState(DEFAULT_CLOUD_INIT)
 
   useEffect(() => {
     if (!isOpen) {
       return
     }
-    setName(DEFAULT_VM_CATALOG_NAME)
+    setScope('global')
+    setName(DEFAULT_BARE_METAL_CATALOG_NAME)
+    setDescription(DEFAULT_DESCRIPTION)
     setAutomationTemplateId(DEFAULT_AUTOMATION_TEMPLATE_ID)
   }, [isOpen])
 
@@ -634,14 +372,6 @@ export function CreateVmCatalogItemWizard({
     })
   }, [isOpen, organizations])
 
-  const filteredDiskImages = useMemo(
-    () =>
-      DISK_IMAGES.filter((image) =>
-        guestOs === 'unspecified' ? true : image.os === guestOs,
-      ),
-    [guestOs],
-  )
-
   const selectedTenant = organizations.find((org) => org.tenantId === tenantId)
   const selectedTenantLabel =
     selectedTenant?.displayName?.trim() || selectedTenant?.name || tenantId
@@ -650,6 +380,29 @@ export function CreateVmCatalogItemWizard({
     AUTOMATION_TEMPLATES[0]
   const selectedDiskImage = DISK_IMAGES.find((image) => image.id === diskImageId)
   const selectedInstanceType = INSTANCE_TYPES.find((type) => type.id === instanceTypeId)
+
+  const hardwareRateEstimate = useMemo(() => {
+    const hardware = findM360RateLineForPublishSelection(
+      'baremetal',
+      instanceTypeId,
+      DEFAULT_M360_RATE_CARD_ID,
+    )
+    if (!hardware) {
+      return null
+    }
+    const osLicense =
+      findM360OsLicenseRateLine(diskImageId, DEFAULT_M360_RATE_CARD_ID) ??
+      ({
+        hourlyRate: 0,
+        monthlyRate: 0,
+      } as const)
+    return {
+      hardware,
+      osLicense,
+      totalHourly: Math.round((hardware.hourlyRate + osLicense.hourlyRate) * 100) / 100,
+      totalMonthly: Math.round(hardware.monthlyRate + osLicense.monthlyRate),
+    }
+  }, [diskImageId, instanceTypeId])
 
   const canContinueDetails =
     isValidKubernetesResourceName(name) &&
@@ -660,7 +413,7 @@ export function CreateVmCatalogItemWizard({
     const publishScope: PublishCatalogScope =
       scope === 'tenant' ? 'vip-enterprise' : 'global-public'
     const payload: PublishedTemplatePayload = {
-      serviceId: 'virtual-machine',
+      serviceId: 'baremetal',
       templateRefId: selectedAutomationTemplate.id,
       templateName: selectedAutomationTemplate.label,
       displayName: name.trim(),
@@ -677,7 +430,7 @@ export function CreateVmCatalogItemWizard({
       instanceTypeLabel: selectedInstanceType?.label,
       diskImageId: selectedDiskImage?.id,
       diskImageLabel: selectedDiskImage?.label,
-      hardwareOsMode: diskImageEditable || instanceTypeEditable ? 'editable' : 'locked',
+      hardwareOsMode: instanceTypeEditable ? 'editable' : 'locked',
       osImageMode: diskImageEditable ? 'editable' : 'locked',
     }
     onCreateCatalogItem(payload)
@@ -689,7 +442,7 @@ export function CreateVmCatalogItemWizard({
 
   return (
     <CatalogWizardPageShell
-      title="Create virtual machine catalog item"
+      title="Create bare metal catalog item"
       onBackToCatalog={onClose}
       className="catalog-wizard-page--create-vm"
     >
@@ -710,7 +463,7 @@ export function CreateVmCatalogItemWizard({
         >
           <Form className="create-vm-catalog-wizard__form">
             <Content component="p" className="create-vm-catalog-wizard__lede">
-              Set scope, name, description, and automation template. Names are unique per tenant.
+              Set scope, name, description, and provisioning template. Names are unique per tenant.
             </Content>
 
             <FormGroup label="Scope" fieldId="create-vm-scope" isRequired>
@@ -850,7 +603,7 @@ export function CreateVmCatalogItemWizard({
             </FormGroup>
 
             <FormGroup
-              label="Automation template"
+              label="Provisioning template"
               fieldId="create-vm-template"
               isRequired
             >
@@ -858,8 +611,7 @@ export function CreateVmCatalogItemWizard({
                 id="create-vm-template"
                 value={automationTemplateId}
                 onChange={(_event, value) => setAutomationTemplateId(value)}
-                aria-label="Automation template"
-                aria-describedby="create-vm-template-helper"
+                aria-label="Provisioning template"
               >
                 {AUTOMATION_TEMPLATES.map((template) => (
                   <FormSelectOption
@@ -869,13 +621,6 @@ export function CreateVmCatalogItemWizard({
                   />
                 ))}
               </FormSelect>
-              <FormHelperText>
-                <HelperText>
-                  <HelperTextItem id="create-vm-template-helper">
-                    The playbook that creates the VM when a tenant launches this catalog item.
-                  </HelperTextItem>
-                </HelperText>
-              </FormHelperText>
             </FormGroup>
           </Form>
         </WizardStep>
@@ -883,71 +628,8 @@ export function CreateVmCatalogItemWizard({
         <WizardStep id="create-vm-catalog-step-compute" name="Hardware">
           <Form className="create-vm-catalog-wizard__form">
             <Content component="p" className="create-vm-catalog-wizard__lede">
-              Choose the disk image and instance type.
+              Choose the instance type and OS for this catalog item.
             </Content>
-
-            <FormGroup
-              label="Guest operating system"
-              fieldId="create-vm-guest-os"
-              isRequired
-              labelInfo={
-                <EditableFieldToggle
-                  id="create-vm-disk-image-editable"
-                  isChecked={diskImageEditable}
-                  onChange={setDiskImageEditable}
-                />
-              }
-            >
-              <div
-                id="create-vm-guest-os"
-                className="provider-setup-template__cluster-version-mode-options create-vm-catalog-wizard__option-grid--3 create-vm-catalog-wizard__choice-options"
-                role="radiogroup"
-                aria-label="Guest operating system"
-              >
-                <SelectableOptionCard
-                  id="create-vm-guest-linux"
-                  title="Linux"
-                  description="RHEL, Ubuntu, Fedora, and more"
-                  icon={<LinuxIcon />}
-                  isSelected={guestOs === 'linux'}
-                  onSelect={() => {
-                    setGuestOs('linux')
-                    setDiskImageId(defaultDiskImageForGuestOs('linux'))
-                  }}
-                />
-                <SelectableOptionCard
-                  id="create-vm-guest-windows"
-                  title="Microsoft Windows"
-                  description="Windows Server and desktop"
-                  icon={<WindowsIcon />}
-                  isSelected={guestOs === 'windows'}
-                  onSelect={() => {
-                    setGuestOs('windows')
-                    setDiskImageId(defaultDiskImageForGuestOs('windows'))
-                  }}
-                />
-                <SelectableOptionCard
-                  id="create-vm-guest-unspecified"
-                  title="Unspecified"
-                  description="Any available image"
-                  icon={<CubesIcon />}
-                  isSelected={guestOs === 'unspecified'}
-                  onSelect={() => {
-                    setGuestOs('unspecified')
-                    setDiskImageId(defaultDiskImageForGuestOs('unspecified'))
-                  }}
-                />
-              </div>
-            </FormGroup>
-
-            <FormGroup label="Disk image" fieldId="create-vm-disk-image" isRequired>
-              <DiskImageSelect
-                id="create-vm-disk-image"
-                value={diskImageId}
-                options={filteredDiskImages}
-                onChange={setDiskImageId}
-              />
-            </FormGroup>
 
             <FormGroup
               label="Instance type"
@@ -967,221 +649,57 @@ export function CreateVmCatalogItemWizard({
                 onChange={setInstanceTypeId}
               />
             </FormGroup>
-          </Form>
-        </WizardStep>
-
-        <WizardStep id="create-vm-catalog-step-storage" name="Storage">
-          <Form className="create-vm-catalog-wizard__form">
-            <Content component="p" className="create-vm-catalog-wizard__lede">
-              Set boot disk size, storage tier, and any additional disks.
-            </Content>
 
             <FormGroup
-              label="Boot disk size (GiB)"
-              fieldId="create-vm-boot-disk"
+              label="OS"
+              fieldId="create-vm-os"
               isRequired
               labelInfo={
                 <EditableFieldToggle
-                  id="create-vm-boot-disk-editable"
-                  isChecked={bootDiskEditable}
-                  onChange={setBootDiskEditable}
-                />
-              }
-            >
-              <TextInput
-                id="create-vm-boot-disk"
-                type="number"
-                min={1}
-                value={bootDiskSize}
-                onChange={(_event, value) => setBootDiskSize(value)}
-                aria-label="Boot disk size in GiB"
-              />
-            </FormGroup>
-
-            <FormGroup
-              label="Boot storage tier"
-              fieldId="create-vm-boot-tier"
-              isRequired
-              labelInfo={
-                <EditableFieldToggle
-                  id="create-vm-boot-tier-editable"
-                  isChecked={bootStorageEditable}
-                  onChange={setBootStorageEditable}
-                />
-              }
-            >
-              <StorageTierSelect
-                id="create-vm-boot-tier"
-                value={bootStorageTier}
-                onChange={setBootStorageTier}
-              />
-            </FormGroup>
-
-            <div className="create-vm-catalog-wizard__additional-disks">
-              {additionalDisks.length > 0 ? (
-                <div className="create-vm-catalog-wizard__additional-disk-list">
-                  {additionalDisks.map((disk, index) => (
-                      <div key={disk.id} className="create-vm-catalog-wizard__additional-disk">
-                        <div className="create-vm-catalog-wizard__additional-disk-header">
-                          <Title headingLevel="h4" size="md">
-                            Disk set {index + 1}
-                          </Title>
-                          <Button
-                            variant="link"
-                            isInline
-                            isDanger
-                            icon={<MinusCircleIcon />}
-                            onClick={() =>
-                              setAdditionalDisks((current) =>
-                                current.filter((item) => item.id !== disk.id),
-                              )
-                            }
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                        <FormGroup
-                          label="Disk size (GiB)"
-                          fieldId={`create-vm-additional-disk-size-${disk.id}`}
-                          isRequired
-                          labelInfo={
-                            <EditableFieldToggle
-                              id={`create-vm-additional-disk-size-editable-${disk.id}`}
-                              isChecked={disk.sizeEditable}
-                              onChange={(sizeEditable) =>
-                                setAdditionalDisks((current) =>
-                                  current.map((item) =>
-                                    item.id === disk.id ? { ...item, sizeEditable } : item,
-                                  ),
-                                )
-                              }
-                            />
-                          }
-                        >
-                          <TextInput
-                            id={`create-vm-additional-disk-size-${disk.id}`}
-                            type="number"
-                            min={1}
-                            value={disk.sizeGiB}
-                            onChange={(_event, value) =>
-                              setAdditionalDisks((current) =>
-                                current.map((item) =>
-                                  item.id === disk.id ? { ...item, sizeGiB: value } : item,
-                                ),
-                              )
-                            }
-                            aria-label={`Disk set ${index + 1} size`}
-                          />
-                        </FormGroup>
-                        <FormGroup
-                          label="Storage tier"
-                          fieldId={`create-vm-additional-disk-tier-${disk.id}`}
-                          isRequired
-                          labelInfo={
-                            <EditableFieldToggle
-                              id={`create-vm-additional-disk-tier-editable-${disk.id}`}
-                              isChecked={disk.storageEditable}
-                              onChange={(storageEditable) =>
-                                setAdditionalDisks((current) =>
-                                  current.map((item) =>
-                                    item.id === disk.id ? { ...item, storageEditable } : item,
-                                  ),
-                                )
-                              }
-                            />
-                          }
-                        >
-                          <StorageTierSelect
-                            id={`create-vm-additional-disk-tier-${disk.id}`}
-                            value={disk.storageTierId}
-                            onChange={(storageTierId) =>
-                              setAdditionalDisks((current) =>
-                                current.map((item) =>
-                                  item.id === disk.id ? { ...item, storageTierId } : item,
-                                ),
-                              )
-                            }
-                            ariaLabel={`Disk set ${index + 1} storage tier`}
-                          />
-                        </FormGroup>
-                      </div>
-                  ))}
-                </div>
-              ) : null}
-              <Button
-                variant="link"
-                isInline
-                icon={<PlusCircleIcon />}
-                onClick={() =>
-                  setAdditionalDisks((current) => [...current, createAdditionalDisk()])
-                }
-              >
-                Add disk
-              </Button>
-            </div>
-          </Form>
-        </WizardStep>
-
-        <WizardStep id="create-vm-catalog-step-access" name="Initialization">
-          <Form className="create-vm-catalog-wizard__form">
-            <Content component="p" className="create-vm-catalog-wizard__lede">
-              Add cloud-init user data for first boot.
-            </Content>
-
-            <FormGroup
-              label="Cloud-init"
-              fieldId="create-vm-cloud-init"
-              labelInfo={
-                <EditableFieldToggle
-                  id="create-vm-cloud-init-editable"
-                  isChecked={cloudInitEditable}
-                  onChange={setCloudInitEditable}
+                  id="create-vm-os-editable"
+                  isChecked={diskImageEditable}
+                  onChange={setDiskImageEditable}
                 />
               }
             >
               <div
-                id="create-vm-cloud-init"
-                className="provider-setup-template__cluster-version-mode-options create-vm-catalog-wizard__choice-options"
+                id="create-vm-os"
+                className="provider-setup-template__cluster-version-mode-options create-vm-catalog-wizard__option-grid--2 create-vm-catalog-wizard__choice-options"
                 role="radiogroup"
-                aria-label="Cloud-init source"
+                aria-label="OS"
               >
-                <SelectableOptionCard
-                  id="create-vm-cloud-init-enter"
-                  title="Enter value"
-                  description="Paste cloud-init user data"
-                  icon={<RhStandardCodeIcon />}
-                  isSelected={cloudInitSource === 'enter-value'}
-                  onSelect={() => setCloudInitSource('enter-value')}
-                />
-                <SelectableOptionCard
-                  id="create-vm-cloud-init-secret"
-                  title="Select secret"
-                  description="Use a Cloud-init secret from this project"
-                  icon={<RhStandardKeyIcon />}
-                  isSelected={cloudInitSource === 'select-secret'}
-                  onSelect={() => setCloudInitSource('select-secret')}
-                />
+                {BARE_METAL_OS_OPTIONS.map((image) => (
+                  <SelectableOptionCard
+                    key={image.id}
+                    id={`create-vm-os-${image.id}`}
+                    title={image.label}
+                    description={image.detail}
+                    rate={resolveVmOsLicenseRateLabel(image.id)}
+                    icon={diskImageOptionIcon(image)}
+                    isSelected={diskImageId === image.id}
+                    onSelect={() => setDiskImageId(image.id)}
+                  />
+                ))}
               </div>
             </FormGroup>
 
-            {cloudInitSource === 'enter-value' ? (
-              <FormGroup label="Cloud-init" fieldId="create-vm-cloud-init-value">
-                <TextArea
-                  id="create-vm-cloud-init-value"
-                  value={cloudInitValue}
-                  onChange={(_event, value) => setCloudInitValue(value)}
-                  aria-label="Add cloud-init configuration"
-                  placeholder="Add cloud-init configuration"
-                  rows={8}
-                />
-              </FormGroup>
-            ) : (
-              <FormGroup label="Cloud-init secret" fieldId="create-vm-cloud-init-secret">
-                <FormSelect id="create-vm-cloud-init-secret" value="" aria-label="Select secret">
-                  <FormSelectOption value="" label="Select a Cloud-init secret" />
-                </FormSelect>
-              </FormGroup>
-            )}
+            {hardwareRateEstimate ? (
+              <div className="create-vm-catalog-wizard__rate-estimate" aria-live="polite">
+                <Content component="p" className="create-vm-catalog-wizard__rate-estimate-total">
+                  <strong>Estimated total</strong>{' '}
+                  {formatM360RateLineHourly({ hourlyRate: hardwareRateEstimate.totalHourly })} (
+                  {formatM360RateLineMonthly({ monthlyRate: hardwareRateEstimate.totalMonthly })})
+                </Content>
+                <Content component="p" className="create-vm-catalog-wizard__rate-estimate-detail">
+                  Hardware {formatM360RateLineHourly(hardwareRateEstimate.hardware)}
+                  {' + '}
+                  OS license {formatM360RateLineHourly(hardwareRateEstimate.osLicense)}
+                </Content>
+                <Content component="p" className="create-vm-catalog-wizard__rate-estimate-plan">
+                  {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}
+                </Content>
+              </div>
+            ) : null}
           </Form>
         </WizardStep>
 
@@ -1196,7 +714,7 @@ export function CreateVmCatalogItemWizard({
         >
           <div className="create-vm-catalog-wizard__form">
             <Content component="p" className="create-vm-catalog-wizard__lede">
-              Confirm settings before creating. The item stays unpublished until you publish it.
+              Confirm settings before creating.
             </Content>
 
             <Title headingLevel="h3" size="md" className="create-vm-catalog-wizard__review-heading">
@@ -1210,7 +728,7 @@ export function CreateVmCatalogItemWizard({
               <ReviewRow term="Name" value={name} />
               <ReviewRow term="Description" value={description || '—'} />
               <ReviewRow
-                term="Automation template"
+                term="Provisioning template"
                 value={selectedAutomationTemplate.label}
               />
               <ReviewRow term="Status" value="Unpublished" />
@@ -1221,25 +739,6 @@ export function CreateVmCatalogItemWizard({
             </Title>
             <DescriptionList isCompact className="create-vm-catalog-wizard__review-list">
               <ReviewRow
-                term="Guest operating system"
-                value={
-                  guestOs === 'linux'
-                    ? 'Linux'
-                    : guestOs === 'windows'
-                      ? 'Microsoft Windows'
-                      : 'Unspecified'
-                }
-              />
-              <ReviewRow
-                term="Disk image"
-                value={
-                  selectedDiskImage
-                    ? diskImageOptionLabel(selectedDiskImage)
-                    : 'Not set'
-                }
-                editable={diskImageEditable}
-              />
-              <ReviewRow
                 term="Instance type"
                 value={
                   selectedInstanceType
@@ -1248,60 +747,82 @@ export function CreateVmCatalogItemWizard({
                 }
                 editable={instanceTypeEditable}
               />
+              <ReviewRow
+                term="OS"
+                value={
+                  selectedDiskImage
+                    ? `${selectedDiskImage.label} · ${resolveVmOsLicenseRateLabel(selectedDiskImage.id)}`
+                    : 'Not set'
+                }
+                editable={diskImageEditable}
+              />
             </DescriptionList>
 
-            <Title headingLevel="h3" size="md" className="create-vm-catalog-wizard__review-heading">
-              Storage
-            </Title>
-            <DescriptionList isCompact className="create-vm-catalog-wizard__review-list">
-              <ReviewRow
-                term="Boot disk size"
-                value={bootDiskSize ? `${bootDiskSize} GiB` : 'Not set'}
-                editable={bootDiskEditable}
-              />
-              <ReviewRow
-                term="Boot storage tier"
-                value={
-                  BOOT_STORAGE_TIERS.find((tier) => tier.id === bootStorageTier)?.label ||
-                  'Not set'
-                }
-                editable={bootStorageEditable}
-              />
-              {additionalDisks.map((disk, index) => {
-                const tierLabel =
-                  BOOT_STORAGE_TIERS.find((tier) => tier.id === disk.storageTierId)?.label ||
-                  'Not set'
-                return (
-                  <Fragment key={disk.id}>
-                    <ReviewRow
-                      term={`Disk set ${index + 1} size`}
-                      value={disk.sizeGiB ? `${disk.sizeGiB} GiB` : 'Not set'}
-                      editable={disk.sizeEditable}
-                    />
-                    <ReviewRow
-                      term={`Disk set ${index + 1} storage tier`}
-                      value={tierLabel}
-                      editable={disk.storageEditable}
-                    />
-                  </Fragment>
-                )
-              })}
-            </DescriptionList>
+            {hardwareRateEstimate ? (
+              <div className="provider-setup-template__publish-review-rate">
+                <div
+                  className="provider-setup-template__cluster-estimate"
+                  aria-live="polite"
+                >
+                  <div className="provider-setup-template__cluster-estimate-header">
+                    <Content
+                      component="p"
+                      className="provider-setup-template__cluster-estimate-label"
+                    >
+                      Estimated total
+                    </Content>
+                    <div className="provider-setup-template__cluster-estimate-totals">
+                      <span className="provider-setup-template__cluster-estimate-hourly">
+                        {formatM360RateLineHourly({
+                          hourlyRate: hardwareRateEstimate.totalHourly,
+                        })}
+                      </span>
+                      <span className="provider-setup-template__cluster-estimate-monthly">
+                        {formatM360RateLineMonthly({
+                          monthlyRate: hardwareRateEstimate.totalMonthly,
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  <DescriptionList
+                    isHorizontal
+                    isCompact
+                    className="provider-setup-template__cluster-estimate-breakdown"
+                  >
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>Hardware</DescriptionListTerm>
+                      <DescriptionListDescription>
+                        {formatM360RateLineHourly(hardwareRateEstimate.hardware)}
+                      </DescriptionListDescription>
+                    </DescriptionListGroup>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>OS license</DescriptionListTerm>
+                      <DescriptionListDescription>
+                        {formatM360RateLineHourly(hardwareRateEstimate.osLicense)}
+                      </DescriptionListDescription>
+                    </DescriptionListGroup>
+                  </DescriptionList>
+                  <Content
+                    component="p"
+                    className="provider-setup-template__cluster-estimate-meta"
+                  >
+                    {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}
+                  </Content>
+                </div>
+              </div>
+            ) : null}
 
-            <Title headingLevel="h3" size="md" className="create-vm-catalog-wizard__review-heading">
-              Initialization
-            </Title>
-            <DescriptionList isCompact className="create-vm-catalog-wizard__review-list">
-              <ReviewRow
-                term="Cloud-init"
-                value={
-                  cloudInitSource === 'enter-value'
-                    ? cloudInitValue.trim() || 'Not set'
-                    : 'Secret'
-                }
-                editable={cloudInitEditable}
-              />
-            </DescriptionList>
+            <Alert
+              variant="info"
+              isInline
+              title="Starts as unpublished"
+              className="provider-setup-template__publish-review-alert"
+            >
+              <Content component="p">
+                New catalog items are saved as unpublished. Publish from the catalog when you
+                are ready for tenants to use this offering.
+              </Content>
+            </Alert>
           </div>
         </WizardStep>
       </Wizard>
