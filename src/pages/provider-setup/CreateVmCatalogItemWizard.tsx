@@ -70,7 +70,7 @@ const DISK_IMAGES = [
   },
 ]
 
-/** Bare metal OS cards for Design 2 Hardware (Linux images only). */
+/** Bare metal OS options for Design 2 Hardware (Linux images only). */
 const BARE_METAL_OS_OPTIONS = DISK_IMAGES.filter((image) => image.os === 'linux')
 
 const INSTANCE_TYPES = getCatalogInstanceTypeOptions('baremetal').map((option) => {
@@ -117,6 +117,7 @@ function resolveVmOsLicenseRateLabel(diskImageId: string): string {
 }
 
 type DiskImageOption = (typeof DISK_IMAGES)[number]
+type InstanceTypeOption = (typeof INSTANCE_TYPES)[number]
 
 function diskImageOptionIcon(image: DiskImageOption): ReactNode {
   if (image.os === 'windows') {
@@ -128,8 +129,6 @@ function diskImageOptionIcon(image: DiskImageOption): ReactNode {
   return <LinuxIcon />
 }
 
-type InstanceTypeOption = (typeof INSTANCE_TYPES)[number]
-
 function instanceTypeDetail(type: InstanceTypeOption): string {
   const parts = [type.detail]
   if (type.accelerator) {
@@ -137,6 +136,10 @@ function instanceTypeDetail(type: InstanceTypeOption): string {
   }
   parts.push(type.rate)
   return parts.join(' · ')
+}
+
+function osOptionDetail(image: DiskImageOption): string {
+  return [image.detail, resolveVmOsLicenseRateLabel(image.id)].join(' · ')
 }
 
 function InstanceTypeOptionContent({ type }: { type: InstanceTypeOption }) {
@@ -150,6 +153,26 @@ function InstanceTypeOptionContent({ type }: { type: InstanceTypeOption }) {
         {type.label}
       </Title>
       <span className="create-vm-instance-type-select__detail">{instanceTypeDetail(type)}</span>
+    </span>
+  )
+}
+
+function OsOptionContent({ image }: { image: DiskImageOption }) {
+  return (
+    <span className="create-vm-os-select__option">
+      <span className="create-vm-os-select__icon" aria-hidden>
+        {diskImageOptionIcon(image)}
+      </span>
+      <span className="create-vm-instance-type-select__option">
+        <Title
+          headingLevel="h3"
+          size="md"
+          className="provider-setup-template__select-card-title create-vm-instance-type-select__label"
+        >
+          {image.label}
+        </Title>
+        <span className="create-vm-instance-type-select__detail">{osOptionDetail(image)}</span>
+      </span>
     </span>
   )
 }
@@ -207,80 +230,65 @@ function InstanceTypeSelect({
   )
 }
 
+function OsSelect({
+  id,
+  value,
+  onChange,
+}: {
+  id: string
+  value: string
+  onChange: (diskImageId: string) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const selected =
+    BARE_METAL_OS_OPTIONS.find((image) => image.id === value) ?? BARE_METAL_OS_OPTIONS[0] ?? null
+
+  return (
+    <Dropdown
+      isOpen={isOpen}
+      onOpenChange={setIsOpen}
+      onSelect={(_event, selectedValue) => {
+        if (selectedValue == null) {
+          return
+        }
+        onChange(String(selectedValue))
+        setIsOpen(false)
+      }}
+      toggle={(toggleRef) => (
+        <MenuToggle
+          ref={toggleRef}
+          id={id}
+          isExpanded={isOpen}
+          onClick={() => setIsOpen((open) => !open)}
+          aria-label="OS"
+          className="create-vm-instance-type-select__toggle bmaas-dropdown-toggle"
+        >
+          {selected ? <OsOptionContent image={selected} /> : 'Select an OS'}
+        </MenuToggle>
+      )}
+      popperProps={{ appendTo: () => document.body, width: 'trigger' }}
+    >
+      <DropdownList className="create-vm-instance-type-select__menu">
+        {BARE_METAL_OS_OPTIONS.map((image) => (
+          <DropdownItem
+            key={image.id}
+            value={image.id}
+            isSelected={value === image.id}
+            className="create-vm-instance-type-select__menu-item"
+          >
+            <OsOptionContent image={image} />
+          </DropdownItem>
+        ))}
+      </DropdownList>
+    </Dropdown>
+  )
+}
+
 type CreateVmCatalogItemWizardProps = {
   isOpen: boolean
   organizations: RegisteredOrganization[]
   onClose: () => void
   onCreateCatalogItem: (payload: PublishedTemplatePayload) => void
-}
-
-type SelectableOptionCardProps = {
-  id: string
-  title: string
-  description: string
-  rate?: string
-  icon: ReactNode
-  isSelected: boolean
-  onSelect: () => void
-}
-
-function SelectableOptionCard({
-  id,
-  title,
-  description,
-  rate,
-  icon,
-  isSelected,
-  onSelect,
-}: SelectableOptionCardProps) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={isSelected}
-      aria-labelledby={id}
-      className={`provider-setup-template__cluster-version-mode-card${
-        isSelected ? ' provider-setup-template__cluster-version-mode-card--selected' : ''
-      }`}
-      onClick={onSelect}
-    >
-      {isSelected ? (
-        <Label
-          color="grey"
-          isCompact
-          className="provider-setup-template__select-card-selected-badge"
-        >
-          Selected
-        </Label>
-      ) : null}
-      <span className="provider-setup-template__cluster-version-mode-icon" aria-hidden>
-        {icon}
-      </span>
-      <span className="provider-setup-template__cluster-version-mode-copy">
-        <Title
-          id={id}
-          headingLevel="h3"
-          size="md"
-          className="provider-setup-template__select-card-title"
-        >
-          {title}
-        </Title>
-        <Content component="p" className="provider-setup-template__select-card-detail">
-          {description}
-        </Content>
-        {rate ? (
-          <Content
-            component="p"
-            className={`provider-setup-template__select-card-rate${
-              isSelected ? ' provider-setup-template__select-card-rate--selected' : ''
-            }`}
-          >
-            {rate}
-          </Content>
-        ) : null}
-      </span>
-    </button>
-  )
 }
 
 function EditableFieldToggle({
@@ -662,25 +670,7 @@ export function CreateVmCatalogItemWizard({
                 />
               }
             >
-              <div
-                id="create-vm-os"
-                className="provider-setup-template__cluster-version-mode-options create-vm-catalog-wizard__option-grid--2 create-vm-catalog-wizard__choice-options"
-                role="radiogroup"
-                aria-label="OS"
-              >
-                {BARE_METAL_OS_OPTIONS.map((image) => (
-                  <SelectableOptionCard
-                    key={image.id}
-                    id={`create-vm-os-${image.id}`}
-                    title={image.label}
-                    description={image.detail}
-                    rate={resolveVmOsLicenseRateLabel(image.id)}
-                    icon={diskImageOptionIcon(image)}
-                    isSelected={diskImageId === image.id}
-                    onSelect={() => setDiskImageId(image.id)}
-                  />
-                ))}
-              </div>
+              <OsSelect id="create-vm-os" value={diskImageId} onChange={setDiskImageId} />
             </FormGroup>
 
             {hardwareRateEstimate ? (
@@ -751,7 +741,7 @@ export function CreateVmCatalogItemWizard({
                 term="OS"
                 value={
                   selectedDiskImage
-                    ? `${selectedDiskImage.label} · ${resolveVmOsLicenseRateLabel(selectedDiskImage.id)}`
+                    ? `${selectedDiskImage.label} · ${osOptionDetail(selectedDiskImage)}`
                     : 'Not set'
                 }
                 editable={diskImageEditable}
