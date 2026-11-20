@@ -20,9 +20,9 @@ import {
 import { KubernetesResourceNameField } from '../shared/KubernetesResourceNameHelper'
 import {
   buildDemoCreateServiceAccountForm,
-  buildServiceAccountClientId,
   createTenantServiceAccount,
   isServiceAccountNameTaken,
+  SERVICE_ACCOUNT_CLIENT_ID_PENDING_LABEL,
   TENANT_SERVICE_ACCOUNTS_DEMO,
   updateTenantServiceAccount,
   validateServiceAccountName,
@@ -129,7 +129,6 @@ export function CreateServiceAccountWizard({
     Boolean(selectedProject)
   const hasEditChanges = Boolean(editBaseline && !formsEqual(form, editBaseline))
   const canSubmit = isEditMode ? isDetailsStepValid && hasEditChanges : isDetailsStepValid
-  const clientIdPreview = buildServiceAccountClientId(tenantSlug, form.name || 'name')
 
   const { startIndex: wizardStartIndex, onStepChange } = useWorkspaceWizardStepUrl(
     true,
@@ -242,19 +241,12 @@ export function CreateServiceAccountWizard({
                 <TextInput
                   id="create-service-account-client-id"
                   className="tenant-admin-service-accounts__client-id-preview"
-                  value={clientIdPreview}
+                  value={SERVICE_ACCOUNT_CLIENT_ID_PENDING_LABEL}
                   readOnly
                   readOnlyVariant="default"
                   aria-readonly="true"
                   aria-label="Generated client ID"
                 />
-                <FormHelperText>
-                  <HelperText>
-                    <HelperTextItem>
-                      Generated automatically as sa-&lt;tenant-id&gt;-&lt;name&gt;.
-                    </HelperTextItem>
-                  </HelperText>
-                </FormHelperText>
               </FormGroup>
             ) : (
               <FormGroup label="Project" fieldId="create-service-account-project" isRequired>
@@ -321,7 +313,9 @@ export function CreateServiceAccountWizard({
         {isDesign2 ? (
           <DescriptionListGroup>
             <DescriptionListTerm>Client ID</DescriptionListTerm>
-            <DescriptionListDescription>{clientIdPreview}</DescriptionListDescription>
+            <DescriptionListDescription>
+              {SERVICE_ACCOUNT_CLIENT_ID_PENDING_LABEL}
+            </DescriptionListDescription>
           </DescriptionListGroup>
         ) : (
           <DescriptionListGroup>

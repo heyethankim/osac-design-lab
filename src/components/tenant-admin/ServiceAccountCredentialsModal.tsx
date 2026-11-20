@@ -12,6 +12,7 @@ import { TENANT_SERVICE_ACCOUNTS_DEMO } from '../../tenantAdmin/serviceAccounts'
 type ServiceAccountCredentialsModalProps = {
   isOpen: boolean
   tenantSlug: string
+  accountId: string
   accountName: string
   clientSecret: string
   onRegenerate?: () => void
@@ -23,6 +24,7 @@ type ServiceAccountCredentialsModalProps = {
 export function ServiceAccountCredentialsModal({
   isOpen,
   tenantSlug,
+  accountId,
   accountName,
   clientSecret,
   onRegenerate,
@@ -44,7 +46,7 @@ export function ServiceAccountCredentialsModal({
       <ModalBody>
         <ServiceAccountCredentialsPanel
           tenantSlug={tenantSlug}
-          accountName={accountName}
+          accountId={accountId}
           clientSecret={clientSecret}
           onRegenerate={onRegenerate}
           onAssignRoles={onAssignRoles}

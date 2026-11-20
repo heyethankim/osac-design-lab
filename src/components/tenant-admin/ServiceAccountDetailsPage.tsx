@@ -18,7 +18,6 @@ import { BindServiceAccountRoleModal } from './BindServiceAccountRoleModal'
 import { ServiceAccountCredentialsPanel } from './ServiceAccountCredentialsPanel'
 import { ServiceAccountRegenerateSecretModal } from './ServiceAccountRegenerateSecretModal'
 import { ServiceAccountTokenRevealModal } from './ServiceAccountTokenRevealModal'
-import { getAssignableTenantRole } from '../../tenantAdmin/administrators'
 import {
   bindServiceAccountRole,
   createServiceAccountToken,
@@ -74,10 +73,6 @@ export function ServiceAccountDetailsPage({
   const [bindRoleAccount, setBindRoleAccount] = useState<TenantServiceAccount | null>(null)
   const [revealedSecret, setRevealedSecret] = useState<TenantSecret | null>(null)
   const [isRegenerateOpen, setIsRegenerateOpen] = useState(false)
-  const [regeneratedCredentials, setRegeneratedCredentials] = useState<{
-    clientId: string
-    clientSecret: string
-  } | null>(null)
 
   useEffect(() => {
     if (!isDesign2 || isDeleting) {
@@ -131,10 +126,7 @@ export function ServiceAccountDetailsPage({
       return
     }
     onAccountChange(result.account)
-    setRegeneratedCredentials({
-      clientId: result.clientId,
-      clientSecret: result.clientSecret,
-    })
+    setIsRegenerateOpen(false)
   }
 
   const handleBindRole = (roleId: ServiceAccountAssignableRoleId) => {
@@ -182,7 +174,6 @@ export function ServiceAccountDetailsPage({
                       {
                         label: TENANT_SERVICE_ACCOUNTS_DEMO.regenerateSecretLabel,
                         onClick: () => {
-                          setRegeneratedCredentials(null)
                           setIsRegenerateOpen(true)
                         },
                       },
@@ -298,14 +289,13 @@ export function ServiceAccountDetailsPage({
                     </div>
                     <ServiceAccountCredentialsPanel
                       tenantSlug={tenantSlug}
-                      accountName={account.name}
+                      accountId={account.id}
                       clientSecret={clientSecret}
                       isRegenerateDisabled={isDeleting}
                       onRegenerate={
                         isDeleting
                           ? undefined
                           : () => {
-                              setRegeneratedCredentials(null)
                               setIsRegenerateOpen(true)
                             }
                       }
@@ -441,11 +431,10 @@ export function ServiceAccountDetailsPage({
                   >
                     {visibleRoleBindings.map((binding) => {
                       const role = getServiceAccountAssignableRole(binding.roleId)
-                      const roleColor = getAssignableTenantRole(binding.roleId).color
                       return (
                         <li key={binding.id} className="entity-details-page__node-set-item">
                           <div className="entity-details-page__node-set-item-header">
-                            <Label color={roleColor} isCompact>
+                            <Label color={role.color} isCompact>
                               {roleLabel(binding.roleId)}
                             </Label>
                             {!isDeleting ? (
@@ -488,11 +477,9 @@ export function ServiceAccountDetailsPage({
       <ServiceAccountRegenerateSecretModal
         isOpen={isRegenerateOpen}
         accountName={account.name}
-        revealed={regeneratedCredentials}
         onConfirm={handleConfirmRegenerate}
         onClose={() => {
           setIsRegenerateOpen(false)
-          setRegeneratedCredentials(null)
         }}
       />
     </>

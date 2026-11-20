@@ -38,33 +38,56 @@ export const TENANT_SERVICE_ACCOUNTS_DEMO = {
   nameImmutableHelp: 'Service account name cannot be modified after creation.',
 } as const
 
-/** Service accounts only support Tenant Admin and Tenant User. */
+/** Design 2 service account roles: Tenant Admin, Tenant Automation, Tenant IdP Manager. */
 export const SERVICE_ACCOUNT_ASSIGNABLE_ROLES = [
   {
     id: 'tenant-administrator' as const,
     label: 'Tenant Admin',
     description: 'Full administrative access to all resources within a tenant.',
+    color: 'purple' as const,
   },
   {
-    id: 'tenant-user' as const,
-    label: 'Tenant User',
-    description: 'Standard user access within a tenant.',
+    id: 'tenant-automation' as const,
+    label: 'Tenant Automation',
+    description: 'Automation access for CI systems and non-human workloads within a tenant.',
+    color: 'teal' as const,
+  },
+  {
+    id: 'tenant-idp-manager' as const,
+    label: 'Tenant IdP Manager',
+    description: 'Manage identity provider configuration for the tenant.',
+    color: 'blue' as const,
   },
 ] as const
 
 export type ServiceAccountAssignableRoleId =
   (typeof SERVICE_ACCOUNT_ASSIGNABLE_ROLES)[number]['id']
 
-/** Design 2 display labels for role grants (Tenant Admin / Tenant User only). */
+/** Design 2 display labels for role grants. */
 export const SERVICE_ACCOUNT_DESIGN2_ROLE_LABELS: Record<ServiceAccountAssignableRoleId, string> = {
   'tenant-administrator': 'Tenant Admin',
-  'tenant-user': 'Tenant User',
+  'tenant-automation': 'Tenant Automation',
+  'tenant-idp-manager': 'Tenant IdP Manager',
 }
+
+/** Legacy role id from earlier prototypes; treated as Tenant Automation. */
+const LEGACY_TENANT_USER_ROLE_ID = 'tenant-user'
 
 export function isServiceAccountAssignableRoleId(
   value: unknown,
 ): value is ServiceAccountAssignableRoleId {
-  return value === 'tenant-administrator' || value === 'tenant-user'
+  return (
+    value === 'tenant-administrator' ||
+    value === 'tenant-automation' ||
+    value === 'tenant-idp-manager'
+  )
+}
+
+function normalizeAssignableRoleId(value: unknown): ServiceAccountAssignableRoleId | null {
+  if (value === LEGACY_TENANT_USER_ROLE_ID) {
+    return 'tenant-automation'
+  }
+  return isServiceAccountAssignableRoleId(value) ? value : null
 }
 
 export function getServiceAccountAssignableRole(
@@ -107,7 +130,12 @@ export type TenantServiceAccount = {
   roleBindings: ServiceAccountRoleBinding[]
   /** Lifecycle status (Design 2). Missing values are treated as active. */
   status?: ServiceAccountStatus
+  /** Design 2: when status became deleting; used to finish cleanup after a delay. */
+  deletingStartedAt?: string
 }
+
+/** Design 2: how long an account stays Deleting before it is removed. */
+export const SERVICE_ACCOUNT_DELETE_CLEANUP_MS = 4000
 
 export type ServiceAccountsDesignVariant = '1' | '2'
 
@@ -115,8 +143,8 @@ export type ServiceAccountProjectFilter = 'all' | string
 
 const STORAGE_KEY_PREFIX = 'bmaas-tenant-service-accounts-v2-'
 
-export const DEMO_CI_PIPELINE_SERVICE_ACCOUNT_ID = 'demo-sa-ci-pipeline'
-export const DEMO_OBSERVABILITY_SERVICE_ACCOUNT_ID = 'demo-sa-observability'
+export const DEMO_CI_PIPELINE_SERVICE_ACCOUNT_ID = '7c9e6679-7425-40de-944b-e07fc1f90ae7'
+export const DEMO_OBSERVABILITY_SERVICE_ACCOUNT_ID = '3fa85f64-5717-4562-b3fc-2c963f66afa6'
 export const DEMO_CI_PIPELINE_TOKEN_SECRET_ID = 'demo-sa-token-ci-pipeline'
 export const DEMO_OBSERVABILITY_TOKEN_SECRET_ID = 'demo-sa-token-observability'
 
@@ -134,7 +162,7 @@ function isRoleBinding(value: unknown): value is ServiceAccountRoleBinding {
   const entry = value as ServiceAccountRoleBinding
   return (
     typeof entry.id === 'string' &&
-    isServiceAccountAssignableRoleId(entry.roleId) &&
+    normalizeAssignableRoleId(entry.roleId) !== null &&
     typeof entry.createdAt === 'string'
   )
 }
@@ -143,7 +171,16 @@ function normalizeRoleBindings(value: unknown): ServiceAccountRoleBinding[] {
   if (!Array.isArray(value)) {
     return []
   }
-  return value.filter(isRoleBinding)
+  return value.flatMap((entry) => {
+    if (!isRoleBinding(entry)) {
+      return []
+    }
+    const roleId = normalizeAssignableRoleId(entry.roleId)
+    if (!roleId) {
+      return []
+    }
+    return [{ ...entry, roleId }]
+  })
 }
 
 function isServiceAccountStatus(value: unknown): value is ServiceAccountStatus {
@@ -168,7 +205,8 @@ function isTenantServiceAccount(value: unknown): value is TenantServiceAccount {
     Array.isArray(entry.tokenSecretIds) &&
     entry.tokenSecretIds.every((id) => typeof id === 'string') &&
     Array.isArray(entry.roleBindings) &&
-    (entry.status === undefined || isServiceAccountStatus(entry.status))
+    (entry.status === undefined || isServiceAccountStatus(entry.status)) &&
+    (entry.deletingStartedAt === undefined || typeof entry.deletingStartedAt === 'string')
   )
 }
 
@@ -176,6 +214,8 @@ function normalizeTenantServiceAccount(entry: TenantServiceAccount): TenantServi
   return {
     ...entry,
     roleBindings: normalizeRoleBindings(entry.roleBindings),
+    deletingStartedAt:
+      typeof entry.deletingStartedAt === 'string' ? entry.deletingStartedAt : undefined,
   }
 }
 
@@ -209,10 +249,15 @@ export function getServiceAccountStatusColor(
   }
 }
 
-/** Keycloak-style public client identifier (Design 2). */
-export function buildServiceAccountClientId(tenantSlug: string, accountName: string): string {
-  return `sa-${tenantSlug}-${accountName.trim().toLowerCase()}`
+/**
+ * Design 2 public client identifier.
+ * Format: osac-sa-&lt;tenant-id&gt;-&lt;account-UUID&gt;
+ */
+export function buildServiceAccountClientId(tenantSlug: string, accountId: string): string {
+  return `osac-sa-${tenantSlug}-${accountId}`
 }
+
+export const SERVICE_ACCOUNT_CLIENT_ID_PENDING_LABEL = 'Generated automatically'
 
 function readStoredAccounts(tenantSlug: string): TenantServiceAccount[] | null {
   try {
@@ -326,8 +371,8 @@ function buildDemoServiceAccounts(tenantSlug: string): TenantServiceAccount[] {
       tokenSecretIds: [DEMO_CI_PIPELINE_TOKEN_SECRET_ID],
       roleBindings: [
         {
-          id: 'binding-ci-tenant-user',
-          roleId: 'tenant-user',
+          id: 'binding-ci-tenant-automation',
+          roleId: 'tenant-automation',
           createdAt: new Date(now - 1000 * 60 * 60 * 24 * 12).toISOString(),
         },
       ],
@@ -344,8 +389,8 @@ function buildDemoServiceAccounts(tenantSlug: string): TenantServiceAccount[] {
       tokenSecretIds: [DEMO_OBSERVABILITY_TOKEN_SECRET_ID],
       roleBindings: [
         {
-          id: 'binding-obs-tenant-user',
-          roleId: 'tenant-user',
+          id: 'binding-obs-tenant-automation',
+          roleId: 'tenant-automation',
           createdAt: new Date(now - 1000 * 60 * 60 * 24 * 5).toISOString(),
         },
       ],
@@ -443,7 +488,7 @@ export function createTenantServiceAccount(
   }))
 
   const account: TenantServiceAccount = {
-    id: `sa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    id: crypto.randomUUID(),
     name,
     description: input.description.trim(),
     projectId: input.projectId,
@@ -548,17 +593,73 @@ export function deleteTenantServiceAccount(tenantSlug: string, id: string): Tena
   return next
 }
 
-/** Design 2: mark deleting instead of hard-removing (cleanup continues in the background). */
+/** Design 2: mark deleting instead of hard-removing (cleanup finishes after a short delay). */
 export function markTenantServiceAccountDeleting(
   tenantSlug: string,
   id: string,
 ): TenantServiceAccount[] {
+  const startedAt = new Date().toISOString()
   const current = listTenantServiceAccounts(tenantSlug)
   const next = current.map((account) =>
-    account.id === id ? { ...account, status: 'deleting' as const } : account,
+    account.id === id
+      ? { ...account, status: 'deleting' as const, deletingStartedAt: startedAt }
+      : account,
   )
   writeStoredAccounts(tenantSlug, sortServiceAccounts(next))
   return listTenantServiceAccounts(tenantSlug)
+}
+
+/** Milliseconds until a deleting account should be purged; 0 if already due. */
+export function getServiceAccountDeletionRemainingMs(
+  account: TenantServiceAccount,
+  nowMs: number = Date.now(),
+): number | null {
+  if (getServiceAccountStatus(account) !== 'deleting') {
+    return null
+  }
+  const startedMs = account.deletingStartedAt ? Date.parse(account.deletingStartedAt) : Number.NaN
+  if (!Number.isFinite(startedMs)) {
+    return 0
+  }
+  return Math.max(0, SERVICE_ACCOUNT_DELETE_CLEANUP_MS - (nowMs - startedMs))
+}
+
+/**
+ * Design 2: hard-remove accounts whose deleting cleanup window has elapsed.
+ * Returns the refreshed list (and whether anything was removed).
+ */
+export function finalizeCompletedServiceAccountDeletions(
+  tenantSlug: string,
+  nowMs: number = Date.now(),
+): { accounts: TenantServiceAccount[]; removedIds: string[] } {
+  const current = listTenantServiceAccounts(tenantSlug)
+  const removedIds: string[] = []
+  const remaining: TenantServiceAccount[] = []
+
+  for (const account of current) {
+    const remainingMs = getServiceAccountDeletionRemainingMs(account, nowMs)
+    if (remainingMs === null) {
+      remaining.push(account)
+      continue
+    }
+    if (remainingMs > 0) {
+      remaining.push(account)
+      continue
+    }
+    for (const secretId of account.tokenSecretIds) {
+      deleteTenantSecret(tenantSlug, secretId)
+    }
+    removedIds.push(account.id)
+  }
+
+  if (removedIds.length > 0) {
+    writeStoredAccounts(tenantSlug, sortServiceAccounts(remaining))
+  }
+
+  return {
+    accounts: listTenantServiceAccounts(tenantSlug),
+    removedIds,
+  }
 }
 
 function replaceAccount(
@@ -640,7 +741,7 @@ export function regenerateServiceAccountSecret(
   return {
     account: updated,
     secret,
-    clientId: buildServiceAccountClientId(tenantSlug, account.name),
+    clientId: buildServiceAccountClientId(tenantSlug, account.id),
     clientSecret,
   }
 }

@@ -22,7 +22,7 @@ const MASKED_SECRET = '••••••••••••••••'
 
 type ServiceAccountCredentialsPanelProps = {
   tenantSlug: string
-  accountName: string
+  accountId: string
   clientSecret: string
   onRegenerate?: () => void
   onAssignRoles?: () => void
@@ -32,7 +32,7 @@ type ServiceAccountCredentialsPanelProps = {
 
 export function ServiceAccountCredentialsPanel({
   tenantSlug,
-  accountName,
+  accountId,
   clientSecret,
   onRegenerate,
   onAssignRoles,
@@ -42,7 +42,7 @@ export function ServiceAccountCredentialsPanel({
   const [isSecretVisible, setIsSecretVisible] = useState(false)
   const [copyTip, setCopyTip] = useState('Copy')
   const previousSecretRef = useRef(clientSecret)
-  const clientId = buildServiceAccountClientId(tenantSlug, accountName)
+  const clientId = buildServiceAccountClientId(tenantSlug, accountId)
   const hasSecret = Boolean(clientSecret)
 
   // Masked dots look identical after regenerate — reveal so the new value is visible.

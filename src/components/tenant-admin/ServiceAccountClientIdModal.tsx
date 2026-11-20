@@ -14,6 +14,7 @@ import { buildServiceAccountClientId } from '../../tenantAdmin/serviceAccounts'
 type ServiceAccountClientIdModalProps = {
   isOpen: boolean
   tenantSlug: string
+  accountId: string
   accountName: string
   onClose: () => void
 }
@@ -21,10 +22,11 @@ type ServiceAccountClientIdModalProps = {
 export function ServiceAccountClientIdModal({
   isOpen,
   tenantSlug,
+  accountId,
   accountName,
   onClose,
 }: ServiceAccountClientIdModalProps) {
-  const clientId = buildServiceAccountClientId(tenantSlug, accountName)
+  const clientId = buildServiceAccountClientId(tenantSlug, accountId)
 
   return (
     <Modal

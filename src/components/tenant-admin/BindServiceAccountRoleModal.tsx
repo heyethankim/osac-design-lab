@@ -73,7 +73,8 @@ export function BindServiceAccountRoleModal({
       <ModalBody>
         {availableRoles.length === 0 ? (
           <Content component="p">
-            This service account already has Tenant Admin and Tenant User.
+            This service account already has Tenant Admin, Tenant Automation, and Tenant IdP
+            Manager.
           </Content>
         ) : (
           <Form className="tenant-admin-service-accounts__bind-role-form">

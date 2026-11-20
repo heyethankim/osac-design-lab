@@ -42,7 +42,9 @@ import {
   buildServiceAccountFilterParts,
   deleteTenantServiceAccount,
   ensureServiceAccountSingleCredential,
+  finalizeCompletedServiceAccountDeletions,
   formatServiceAccountCreatedAt,
+  getServiceAccountDeletionRemainingMs,
   getServiceAccountStatus,
   getServiceAccountStatusColor,
   getServiceAccountStatusLabel,
@@ -103,10 +105,6 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
   const [accountPendingEdit, setAccountPendingEdit] = useState<TenantServiceAccount | null>(null)
   const [credentialsAccount, setCredentialsAccount] = useState<TenantServiceAccount | null>(null)
   const [regenerateAccount, setRegenerateAccount] = useState<TenantServiceAccount | null>(null)
-  const [regeneratedCredentials, setRegeneratedCredentials] = useState<{
-    clientId: string
-    clientSecret: string
-  } | null>(null)
   const [focusPermissionsOnOpen, setFocusPermissionsOnOpen] = useState(false)
 
   const projects = useMemo(() => getTenantProjects(tenantSlug), [tenantSlug])
@@ -116,8 +114,50 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
     : null
 
   useEffect(() => {
-    setAccounts(listTenantServiceAccounts(tenantSlug))
+    const { accounts: next, removedIds } = finalizeCompletedServiceAccountDeletions(tenantSlug)
+    setAccounts(next)
+    if (removedIds.length > 0) {
+      setSelectedAccountId((current) => (current && removedIds.includes(current) ? null : current))
+      setCredentialsAccount((current) =>
+        current && removedIds.includes(current.id) ? null : current,
+      )
+      setRegenerateAccount((current) =>
+        current && removedIds.includes(current.id) ? null : current,
+      )
+    }
   }, [tenantSlug])
+
+  useEffect(() => {
+    if (!isDesign2) {
+      return
+    }
+
+    const deletingAccounts = accounts.filter(
+      (account) => getServiceAccountStatus(account) === 'deleting',
+    )
+    if (deletingAccounts.length === 0) {
+      return
+    }
+
+    const timers = deletingAccounts.map((account) => {
+      const remainingMs = getServiceAccountDeletionRemainingMs(account) ?? 0
+      return window.setTimeout(() => {
+        const { accounts: next, removedIds } = finalizeCompletedServiceAccountDeletions(tenantSlug)
+        setAccounts(next)
+        if (removedIds.includes(account.id)) {
+          setSelectedAccountId((current) => (current === account.id ? null : current))
+          setCredentialsAccount((current) => (current?.id === account.id ? null : current))
+          setRegenerateAccount((current) => (current?.id === account.id ? null : current))
+        }
+      }, remainingMs)
+    })
+
+    return () => {
+      for (const timer of timers) {
+        window.clearTimeout(timer)
+      }
+    }
+  }, [accounts, isDesign2, tenantSlug])
 
   useEffect(() => {
     const isCreateAction =
@@ -152,7 +192,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
         return true
       }
 
-      const clientId = buildServiceAccountClientId(tenantSlug, account.name).toLowerCase()
+      const clientId = buildServiceAccountClientId(tenantSlug, account.id).toLowerCase()
 
       return (
         account.name.toLowerCase().includes(query) ||
@@ -195,7 +235,17 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
   }
 
   const refreshAccounts = () => {
-    setAccounts(listTenantServiceAccounts(tenantSlug))
+    const { accounts: next, removedIds } = finalizeCompletedServiceAccountDeletions(tenantSlug)
+    setAccounts(next)
+    if (removedIds.length > 0) {
+      setSelectedAccountId((current) => (current && removedIds.includes(current) ? null : current))
+      setCredentialsAccount((current) =>
+        current && removedIds.includes(current.id) ? null : current,
+      )
+      setRegenerateAccount((current) =>
+        current && removedIds.includes(current.id) ? null : current,
+      )
+    }
   }
 
   const handleCreated = (account: TenantServiceAccount) => {
@@ -246,13 +296,10 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
       return
     }
     refreshAccounts()
-    setRegeneratedCredentials({
-      clientId: result.clientId,
-      clientSecret: result.clientSecret,
-    })
     if (credentialsAccount?.id === regenerateAccount.id) {
       setCredentialsAccount(result.account)
     }
+    setRegenerateAccount(null)
   }
 
   const getRowActions = (account: TenantServiceAccount): IAction[] => {
@@ -276,7 +323,6 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
           title: TENANT_SERVICE_ACCOUNTS_DEMO.regenerateSecretLabel,
           isDisabled: isDeleting,
           onClick: () => {
-            setRegeneratedCredentials(null)
             setRegenerateAccount(account)
           },
         },
@@ -333,7 +379,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
         <Content component="p" id="delete-service-account-description">
           {accountPendingDelete ? (
             isDesign2 ? (
-              'Access ends immediately. Status stays Deleting until cleanup finishes.'
+              'Access ends immediately. Status shows Deleting for a few seconds while cleanup finishes, then the account is removed.'
             ) : (
               <>
                 <strong>{accountPendingDelete.name}</strong> and its linked token secrets will be
@@ -362,6 +408,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
       <ServiceAccountCredentialsModal
         isOpen={credentialsAccount !== null}
         tenantSlug={tenantSlug}
+        accountId={credentialsAccount?.id ?? ''}
         accountName={credentialsAccount?.name ?? ''}
         clientSecret={
           credentialsAccount ? getAccountClientSecret(tenantSlug, credentialsAccount) : ''
@@ -379,7 +426,6 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
           if (!credentialsAccount) {
             return
           }
-          setRegeneratedCredentials(null)
           setRegenerateAccount(credentialsAccount)
         }}
         onClose={() => setCredentialsAccount(null)}
@@ -387,11 +433,9 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
       <ServiceAccountRegenerateSecretModal
         isOpen={regenerateAccount !== null}
         accountName={regenerateAccount?.name ?? ''}
-        revealed={regeneratedCredentials}
         onConfirm={handleConfirmRegenerate}
         onClose={() => {
           setRegenerateAccount(null)
-          setRegeneratedCredentials(null)
         }}
       />
     </>
@@ -554,7 +598,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
               <div className="catalog-card-grid catalog-card-grid--stable tenant-admin-administration__grid">
                 {filteredAccounts.map((account) => {
                   const status = getServiceAccountStatus(account)
-                  const clientId = buildServiceAccountClientId(tenantSlug, account.name)
+                  const clientId = buildServiceAccountClientId(tenantSlug, account.id)
                   return (
                     <Card
                       key={account.id}
@@ -665,7 +709,7 @@ export function TenantAdminServiceAccountsPage({ tenantSlug }: TenantAdminServic
                 <Tbody>
                   {filteredAccounts.map((account) => {
                     const status = getServiceAccountStatus(account)
-                    const clientId = buildServiceAccountClientId(tenantSlug, account.name)
+                    const clientId = buildServiceAccountClientId(tenantSlug, account.id)
                     return (
                       <Tr key={account.id}>
                         <Td dataLabel="Name" className="tenant-admin-administration__col-name">
