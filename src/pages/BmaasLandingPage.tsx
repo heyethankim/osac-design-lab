@@ -136,7 +136,7 @@ const LANDING_TOPICS: TopicCard[] = [
     title: 'Service accounts',
     description:
       'Compare Tenant Admin designs for non-human identities, credentials, and role access.',
-    status: 'In progress',
+    status: 'In review',
     jira: {
       key: 'OSAC-5149',
       href: 'https://redhat.atlassian.net/browse/OSAC-5149',
