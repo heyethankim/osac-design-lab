@@ -889,17 +889,17 @@ export function TenantOnboardingWizard({
             }))
           }
         />
-        <FormHelperText>
-          <HelperText>
-            <HelperTextItem>
-              {showZuoraGuidance
-                ? hideIntegratedBillingUi
-                  ? 'Optional. Leave blank to register now; you can add it later from Edit. Not checked against the platform.'
-                  : 'Optional. Not checked against the platform.'
-                : 'Your billing system’s account ID. Not checked against the platform.'}
-            </HelperTextItem>
-          </HelperText>
-        </FormHelperText>
+        {showZuoraGuidance && hideIntegratedBillingUi ? null : (
+          <FormHelperText>
+            <HelperText>
+              <HelperTextItem>
+                {showZuoraGuidance
+                  ? 'Optional. Not checked against the platform.'
+                  : 'Your billing system’s account ID. Not checked against the platform.'}
+              </HelperTextItem>
+            </HelperText>
+          </FormHelperText>
+        )}
       </FormGroup>
     )
   }
@@ -916,15 +916,6 @@ export function TenantOnboardingWizard({
             Enter an optional external billing ID for this tenant. You can leave it blank and add
             it later.
           </Content>
-          <Alert
-            variant="info"
-            isInline
-            title="External billing ID"
-            className="tenant-onboarding__alert"
-          >
-            Optional. Use your external system’s account ID (for example Zuora). It is not checked
-            against the platform.
-          </Alert>
           <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
             {renderExternalBillingIdField()}
           </Form>
