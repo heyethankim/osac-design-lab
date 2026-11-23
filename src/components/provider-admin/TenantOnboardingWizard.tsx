@@ -236,10 +236,8 @@ export function TenantOnboardingWizard({
   const [billingAccounts, setBillingAccounts] = useState<M360BillingAccount[]>([])
   const [billingApiState, setBillingApiState] = useState<BillingApiState>('idle')
   const [billingAccountsFetchKey, setBillingAccountsFetchKey] = useState(0)
-  // Design 1 (Option A): default to Set up billing later so the external ID path is visible.
-  const [billingLinkTiming, setBillingLinkTiming] = useState<BillingLinkTiming>(
-    isOptionA ? 'later' : 'now',
-  )
+  // Design 1 (Option A): default to Link a billing account now (Recommended).
+  const [billingLinkTiming, setBillingLinkTiming] = useState<BillingLinkTiming>('now')
   const [billingPlatformId, setBillingPlatformId] = useState<BillingPlatformId>(
     DEFAULT_BILLING_PLATFORM_ID,
   )
@@ -388,7 +386,7 @@ export function TenantOnboardingWizard({
     setBillingAccounts([])
     setBillingApiState('idle')
     setBillingAccountsFetchKey(0)
-    setBillingLinkTiming(isOptionA ? 'later' : 'now')
+    setBillingLinkTiming('now')
     setBillingPlatformId(DEFAULT_BILLING_PLATFORM_ID)
     setSelectedAccountName('')
     setLinkError(null)
