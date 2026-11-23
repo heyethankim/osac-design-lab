@@ -1,5 +1,5 @@
 /** Supported billing platforms for tenant onboarding / account linking. */
-export type BillingPlatformId = 'm360'
+export type BillingPlatformId = 'm360' | 'zuora'
 
 export type BillingPlatformOption = {
   id: BillingPlatformId
@@ -10,8 +10,7 @@ export type BillingPlatformOption = {
 }
 
 /**
- * MVP: M360 only. Additional platforms (and real adapters for account fetch/link)
- * can be registered here later; account lists load per selected platform.
+ * Design 1 integrated billing platforms. Account lists load per selected platform.
  */
 export const BILLING_PLATFORM_OPTIONS: ReadonlyArray<BillingPlatformOption> = [
   {
@@ -19,6 +18,13 @@ export const BILLING_PLATFORM_OPTIONS: ReadonlyArray<BillingPlatformOption> = [
     label: 'M360',
     shortLabel: 'M360',
     detail: 'Link an existing M360 billing account to this tenant.',
+    isAvailable: true,
+  },
+  {
+    id: 'zuora',
+    label: 'Zuora',
+    shortLabel: 'Zuora',
+    detail: 'Link an existing Zuora billing account to this tenant.',
     isAvailable: true,
   },
 ]

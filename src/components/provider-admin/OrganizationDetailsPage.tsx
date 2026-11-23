@@ -45,10 +45,12 @@ import {
   resolveTenantSetupStatus,
   isHarborlineCapitalOrganization,
   resolveOrganizationCompanyLogo,
+  shouldShowExternalBillingId,
   type OrganizationActivationStep,
   type RegisteredOrganization,
 } from '../../providerAdmin/organizations'
 import { AdditionalEmailDomainsValue } from './AdditionalEmailDomainsField'
+import { ExternalBillingIdInlineEdit } from './ExternalBillingIdInlineEdit'
 import { AddTenantAdministratorWizard } from '../tenant-admin/AddTenantAdministratorWizard'
 import { OrganizationResourceUsageSection } from './OrganizationResourceUsageSection'
 import { IDP_MANAGER_ROLES_COPY } from '../../idpManager/constants'
@@ -68,6 +70,11 @@ type OrganizationDetailsPageProps = {
   onReviewIdentityProvider?: (organization: RegisteredOrganization) => void
   onReviewRoles?: (organization: RegisteredOrganization) => void
   onOrganizationChange?: (organization: RegisteredOrganization) => void
+  /** Design 2: persist External billing ID from inline edit (no wizard). */
+  onExternalBillingIdChange?: (
+    organization: RegisteredOrganization,
+    externalBillingId: string,
+  ) => void
   /** Design 2 external-billing-ID topic: hide M360 and offer add/edit external ID. */
   externalBillingOnly?: boolean
 }
@@ -175,12 +182,12 @@ function TenantSetupTimelineStep({
   const idpConnectedByLabel = connectedBy
     ? identityProviderConnectedByLabel(connectedBy)
     : null
+  // Design 2 edits External billing ID inline on Overview — do not route into the wizard.
   const canReviewBilling =
     step.id === 'billing_account' &&
     typeof onReviewBilling === 'function' &&
-    (externalBillingOnly ||
-      step.status === 'current' ||
-      step.status === 'problematic')
+    !externalBillingOnly &&
+    (step.status === 'current' || step.status === 'problematic')
   const canReviewIdp =
     step.id === 'idp' &&
     !step.complete &&
@@ -325,12 +332,16 @@ export function OrganizationDetailsPage({
   onReviewIdentityProvider,
   onReviewRoles,
   onOrganizationChange,
+  onExternalBillingIdChange,
   externalBillingOnly = false,
 }: OrganizationDetailsPageProps) {
   const activationSteps = getOrganizationActivationSteps(organization, {
     externalBillingOnly,
   })
   const externalBillingId = organization.externalBillingId?.trim() || ''
+  const showExternalBillingId = shouldShowExternalBillingId(organization, {
+    externalBillingOnly,
+  })
   const setupDisplayStatus = getOrganizationSetupDisplayStatus(organization, {
     externalBillingOnly,
   })
@@ -477,46 +488,25 @@ export function OrganizationDetailsPage({
                     </span>
                   </DescriptionListDescription>
                 </DescriptionListGroup>
-                <DescriptionListGroup>
-                  <DescriptionListTerm>External billing ID</DescriptionListTerm>
-                  <DescriptionListDescription>
-                    {externalBillingOnly ? (
-                      <Content component="p" className="provider-admin-organizations__billing-summary">
-                        {externalBillingId ? (
-                          <>
-                            <code>{externalBillingId}</code>
-                            {onReviewBilling ? (
-                              <>
-                                <BillingSummarySeparator />
-                                <Button
-                                  variant="link"
-                                  isInline
-                                  onClick={() => onReviewBilling(organization)}
-                                >
-                                  Edit
-                                </Button>
-                              </>
-                            ) : null}
-                          </>
-                        ) : onReviewBilling ? (
-                          <Button
-                            variant="link"
-                            isInline
-                            onClick={() => onReviewBilling(organization)}
-                          >
-                            Add external billing ID
-                          </Button>
-                        ) : (
-                          '—'
-                        )}
-                      </Content>
-                    ) : externalBillingId ? (
-                      <code>{externalBillingId}</code>
-                    ) : (
-                      '—'
-                    )}
-                  </DescriptionListDescription>
-                </DescriptionListGroup>
+                {showExternalBillingId ? (
+                  <DescriptionListGroup>
+                    <DescriptionListTerm>External billing ID</DescriptionListTerm>
+                    <DescriptionListDescription>
+                      {externalBillingOnly && onExternalBillingIdChange ? (
+                        <ExternalBillingIdInlineEdit
+                          value={externalBillingId}
+                          onSave={(nextValue) =>
+                            onExternalBillingIdChange(organization, nextValue)
+                          }
+                        />
+                      ) : externalBillingId ? (
+                        <code>{externalBillingId}</code>
+                      ) : (
+                        '—'
+                      )}
+                    </DescriptionListDescription>
+                  </DescriptionListGroup>
+                ) : null}
                 {!externalBillingOnly ? (
                   <DescriptionListGroup>
                     <DescriptionListTerm>Billing</DescriptionListTerm>

@@ -56,6 +56,7 @@ import {
   type M360BillingAccount,
 } from '../../billing/m360Accounts'
 import { resolveM360ConnectionStatus } from '../../billing/m360'
+import { fetchZuoraBillingAccounts } from '../../billing/zuoraAccounts'
 import { KubernetesResourceNameField } from '../shared/KubernetesResourceNameHelper'
 import { ResourceCreatePageShell } from '../shared/ResourceCreatePageShell'
 import { useWizardLeaveConfirm } from '../shared/useWizardLeaveConfirm'
@@ -104,7 +105,7 @@ import {
 
 /**
  * External billing ID Design Lab variants.
- * - `option-a` (Design 1): Link now / Set up later cards + external billing ID
+ * - `option-a` (Design 1): Link now / Set up later; External billing ID only when not linking M360
  * - `option-b` (Design 2): no integrated billing configured — external billing ID only
  */
 export type ExternalBillingDesignVariant = 'option-a' | 'option-b'
@@ -234,6 +235,7 @@ export function TenantOnboardingWizard({
   )
   const [billingAccounts, setBillingAccounts] = useState<M360BillingAccount[]>([])
   const [billingApiState, setBillingApiState] = useState<BillingApiState>('idle')
+  const [billingAccountsFetchKey, setBillingAccountsFetchKey] = useState(0)
   // Design 1 (Option A): default to Set up billing later so the external ID path is visible.
   const [billingLinkTiming, setBillingLinkTiming] = useState<BillingLinkTiming>(
     isOptionA ? 'later' : 'now',
@@ -248,6 +250,7 @@ export function TenantOnboardingWizard({
   const usesExternalBillingOnly = hideIntegratedBillingUi || billingLinkTiming === 'later'
   const selectedBillingPlatform = getBillingPlatformOption(billingPlatformId)
   const isM360PlatformSelected = billingPlatformId === 'm360'
+  const isIntegratedBillingPlatformSelected = Boolean(selectedBillingPlatform?.isAvailable)
 
   const existingOrganizations = useMemo(
     () => (isOpen ? getProviderRegisteredOrganizations() : []),
@@ -384,6 +387,7 @@ export function TenantOnboardingWizard({
     setCreatedOrganization(null)
     setBillingAccounts([])
     setBillingApiState('idle')
+    setBillingAccountsFetchKey(0)
     setBillingLinkTiming(isOptionA ? 'later' : 'now')
     setBillingPlatformId(DEFAULT_BILLING_PLATFORM_ID)
     setSelectedAccountName('')
@@ -434,11 +438,11 @@ export function TenantOnboardingWizard({
   }, [editingOrganization, isOpen, resumeOrganization])
 
   useEffect(() => {
-    if (!isOpen || billingApiState !== 'idle') {
+    if (!isOpen) {
       return
     }
 
-    // Design 2 (Option B): no integrated billing system — skip M360 account fetch.
+    // Design 2 (Option B): no integrated billing system — skip account fetch.
     if (hideIntegratedBillingUi) {
       setBillingAccounts([])
       setSelectedAccountName('')
@@ -446,11 +450,30 @@ export function TenantOnboardingWizard({
       return
     }
 
+    if (!linkBillingNow) {
+      setBillingAccounts([])
+      setBillingApiState('ready')
+      return
+    }
+
+    let cancelled = false
+    const platformId = billingPlatformId
+    setBillingAccounts([])
+    setSelectedAccountName('')
     setBillingApiState('loading')
-    fetchM360BillingAccounts()
+
+    const fetchAccounts =
+      platformId === 'zuora' ? fetchZuoraBillingAccounts : fetchM360BillingAccounts
+    fetchAccounts()
       .then((accounts) => {
+        if (cancelled) {
+          return
+        }
         const organization = createdOrganization ?? sourceOrganization
-        const mergedAccounts = mergeResumedM360BillingAccounts(accounts, organization)
+        const mergedAccounts =
+          platformId === 'm360'
+            ? mergeResumedM360BillingAccounts(accounts, organization)
+            : accounts
         setBillingAccounts(mergedAccounts)
         setBillingApiState('ready')
         const match = draftTenantName
@@ -462,22 +485,30 @@ export function TenantOnboardingWizard({
         )
         if (match && (hasLinkedBilling || !isEditMode)) {
           setSelectedAccountName(getM360AccountTenantName(match))
+        } else if (platformId === 'm360') {
+          setSelectedAccountName(isEditMode ? '' : billingDefaults.accountName)
         } else {
-          setSelectedAccountName((current) =>
-            current || (isEditMode ? '' : billingDefaults.accountName),
-          )
+          setSelectedAccountName('')
         }
       })
       .catch(() => {
-        setBillingApiState('error')
+        if (!cancelled) {
+          setBillingApiState('error')
+        }
       })
+
+    return () => {
+      cancelled = true
+    }
   }, [
-    billingApiState,
+    billingAccountsFetchKey,
+    billingPlatformId,
     createdOrganization,
     draftTenantName,
     hideIntegratedBillingUi,
     isEditMode,
     isOpen,
+    linkBillingNow,
     sourceOrganization,
   ])
 
@@ -650,18 +681,29 @@ export function TenantOnboardingWizard({
     }
 
     const linkedTenantName = getM360AccountTenantName(selectedAccount)
-    linkM360AccountInDemoStore(linkedTenantName, organization)
-    const detectedRateCard = resolveM360AccountRateCard(selectedAccount)
+    const linkedAccountId =
+      selectedAccount.accountNumber?.trim() ||
+      selectedAccount.accountId.trim() ||
+      linkedTenantName
+    if (isM360PlatformSelected) {
+      linkM360AccountInDemoStore(linkedTenantName, organization)
+    }
+    const detectedRateCard = isM360PlatformSelected
+      ? resolveM360AccountRateCard(selectedAccount)
+      : null
 
     const linked: RegisteredOrganization = {
       ...organization,
-      m360AccountId: linkedTenantName,
-      billingAccountId: linkedTenantName,
+      m360AccountId: isM360PlatformSelected ? linkedTenantName : '',
+      billingAccountId: isM360PlatformSelected ? linkedTenantName : linkedAccountId,
       billingAccountName: linkedTenantName,
-      externalBillingId: normalizeExternalBillingId(form.externalBillingId).trim(),
+      // Design 1: External billing ID is hidden when integrated billing is linked.
+      externalBillingId: '',
       m360RateCardId: detectedRateCard?.id,
       m360RateCardName: detectedRateCard?.name,
-      m360ConnectionStatus: resolveM360ConnectionStatus(linkedTenantName),
+      m360ConnectionStatus: isM360PlatformSelected
+        ? resolveM360ConnectionStatus(linkedTenantName)
+        : 'not_found',
       billingAccountLinked: true,
       tenantSetupStatus: 'ready',
     }
@@ -690,7 +732,7 @@ export function TenantOnboardingWizard({
     const externalBillingId = normalizeExternalBillingId(form.externalBillingId).trim()
 
     // Design 2: no integrated billing — optional external ID must not leave "Billing pending".
-    // Empty ID is allowed; providers can add it later via Edit.
+    // Empty ID is allowed; providers can add or update it later via inline edit on tenant details.
     const withoutBillingLink: RegisteredOrganization = hideIntegratedBillingUi
       ? {
           ...organization,
@@ -715,7 +757,7 @@ export function TenantOnboardingWizard({
   }
 
   const retryFetchAccounts = () => {
-    setBillingApiState('idle')
+    setBillingAccountsFetchKey((key) => key + 1)
   }
 
   function isStepDisabled(_stepId: TenantOnboardingStepId): boolean {
@@ -913,8 +955,8 @@ export function TenantOnboardingWizard({
       return (
         <div className="provider-admin-organizations__wizard-step tenant-onboarding__step">
           <Content component="p" className="provider-admin-organizations__wizard-lede">
-            Enter an optional external billing ID for this tenant. You can leave it blank and add
-            it later.
+            Enter an optional external billing ID for this tenant. You can leave it blank and add or
+            update it later from the tenant overview.
           </Content>
           <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
             {renderExternalBillingIdField()}
@@ -948,7 +990,13 @@ export function TenantOnboardingWizard({
                 className={`provider-setup-template__select-card tenant-onboarding__timing-card${
                   isSelected ? ' provider-setup-template__select-card--selected' : ''
                 }`}
-                onClick={() => setBillingLinkTiming(option.id)}
+                onClick={() => {
+                  setBillingLinkTiming(option.id)
+                  // Design 1: External billing ID is not collected while linking M360.
+                  if (option.id === 'now') {
+                    setForm((current) => ({ ...current, externalBillingId: '' }))
+                  }
+                }}
               >
                 {isSelected ? (
                   <Label
@@ -1017,7 +1065,7 @@ export function TenantOnboardingWizard({
               </FormHelperText>
             </FormGroup>
 
-            {isM360PlatformSelected ? (
+            {isIntegratedBillingPlatformSelected ? (
               <>
                 {selectedAccountInactive && selectedAccount ? (
                   <Alert
@@ -1026,14 +1074,21 @@ export function TenantOnboardingWizard({
                     title="Selected account is inactive"
                     className="tenant-onboarding__alert"
                   >
-                    Activate it in {platformLabel} before linking.{' '}
-                    <RouterButton
-                      variant="link"
-                      isInline
-                      to={buildM360AccountDetailPath(getM360AccountTenantName(selectedAccount))}
-                    >
-                      Open in {platformLabel}
-                    </RouterButton>
+                    Activate it in {platformLabel} before linking.
+                    {isM360PlatformSelected ? (
+                      <>
+                        {' '}
+                        <RouterButton
+                          variant="link"
+                          isInline
+                          to={buildM360AccountDetailPath(
+                            getM360AccountTenantName(selectedAccount),
+                          )}
+                        >
+                          Open in {platformLabel}
+                        </RouterButton>
+                      </>
+                    ) : null}
                   </Alert>
                 ) : null}
 
@@ -1165,11 +1220,14 @@ export function TenantOnboardingWizard({
           </Form>
         ) : null}
 
-        <div className="tenant-onboarding__optional-billing">
-          <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
-            {renderExternalBillingIdField()}
-          </Form>
-        </div>
+        {/* Design 1: External billing ID only when integrated billing is not configured (Set up later). */}
+        {!linkBillingNow ? (
+          <div className="tenant-onboarding__optional-billing">
+            <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
+              {renderExternalBillingIdField()}
+            </Form>
+          </div>
+        ) : null}
       </div>
     )
   }
@@ -1248,7 +1306,7 @@ export function TenantOnboardingWizard({
             <DescriptionListGroup>
               <DescriptionListTerm>Billing</DescriptionListTerm>
               <DescriptionListDescription>
-                {linkBillingNow && isM360PlatformSelected && selectedAccount
+                {linkBillingNow && isIntegratedBillingPlatformSelected && selectedAccount
                   ? formatBillingPlatformAccountSummary(
                       billingPlatformId,
                       getM360AccountTenantName(selectedAccount),
@@ -1257,13 +1315,15 @@ export function TenantOnboardingWizard({
               </DescriptionListDescription>
             </DescriptionListGroup>
           ) : null}
-          <DescriptionListGroup>
-            <DescriptionListTerm>External billing ID</DescriptionListTerm>
-            <DescriptionListDescription>
-              {normalizeExternalBillingId(form.externalBillingId).trim() ||
-                (hideIntegratedBillingUi ? 'Not set — can add later' : '—')}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
+          {usesExternalBillingOnly ? (
+            <DescriptionListGroup>
+              <DescriptionListTerm>External billing ID</DescriptionListTerm>
+              <DescriptionListDescription>
+                {normalizeExternalBillingId(form.externalBillingId).trim() ||
+                  (hideIntegratedBillingUi ? 'Not set — can add later' : '—')}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+          ) : null}
         </DescriptionList>
         {linkError ? (
           <Alert variant="danger" isInline title="Unable to register tenant" className="tenant-onboarding__alert">
@@ -1303,8 +1363,7 @@ export function TenantOnboardingWizard({
     if (stepId === 'billing_account') {
       const canContinue = usesExternalBillingOnly
         ? true
-        : Boolean(selectedBillingPlatform?.isAvailable) &&
-          isM360PlatformSelected &&
+        : isIntegratedBillingPlatformSelected &&
           billingApiState === 'ready' &&
           Boolean(selectedAccountName) &&
           !accountConflict &&
@@ -1318,7 +1377,7 @@ export function TenantOnboardingWizard({
     if (stepId === 'review') {
       const canRegister = usesExternalBillingOnly
         ? canSaveOrganizationEdit
-        : isM360PlatformSelected &&
+        : isIntegratedBillingPlatformSelected &&
           Boolean(selectedAccount) &&
           !accountConflict &&
           canSaveOrganizationEdit

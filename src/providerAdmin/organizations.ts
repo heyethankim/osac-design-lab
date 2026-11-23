@@ -266,6 +266,30 @@ export function isTenantBillingConfigured(organization: RegisteredOrganization):
   return status === 'billing_configured' || status === 'ready'
 }
 
+/**
+ * Design 1 visibility: External billing ID is hidden when an integrated billing
+ * provider (M360) is linked. Design 2 always surfaces External billing ID.
+ */
+export function hasIntegratedBillingConfigured(
+  organization: RegisteredOrganization,
+): boolean {
+  return Boolean(
+    organization.m360AccountId?.trim() ||
+      (organization.billingAccountLinked === true && organization.billingAccountId.trim()),
+  )
+}
+
+/** Whether to show External billing ID on Design 1 tenant surfaces. */
+export function shouldShowExternalBillingId(
+  organization: RegisteredOrganization,
+  options?: { externalBillingOnly?: boolean },
+): boolean {
+  if (options?.externalBillingOnly === true) {
+    return true
+  }
+  return !hasIntegratedBillingConfigured(organization)
+}
+
 export function isOrganizationBillingPending(organization: RegisteredOrganization): boolean {
   return !isTenantBillingConfigured(organization)
 }

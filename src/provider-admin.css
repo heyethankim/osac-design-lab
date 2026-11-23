@@ -6692,6 +6692,48 @@ html[data-wizard-width='max'] .catalog-wizard-page__wizard.pf-v6-c-wizard .pf-v6
   --pf-v6-c-button--FontSize: var(--pf-t--global--font--size--body--sm);
 }
 
+.provider-admin-organizations__external-billing-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.provider-admin-organizations__external-billing-inline--editing {
+  width: 100%;
+  max-width: 22rem;
+}
+
+.provider-admin-organizations__external-billing-inline-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.provider-admin-organizations__external-billing-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: var(--pf-t--global--spacer--xs);
+}
+
+.provider-admin-organizations__external-billing-inline .pf-v6-c-form-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.provider-admin-organizations__external-billing-inline .pf-v6-c-button.pf-m-plain {
+  flex-shrink: 0;
+}
+
+.provider-admin-organizations__external-billing-inline-save--dirty.pf-v6-c-button.pf-m-plain {
+  color: var(--pf-t--global--icon--color--brand--default);
+}
+
+.provider-admin-organizations__external-billing-inline-save--dirty.pf-v6-c-button.pf-m-plain:hover {
+  color: var(--pf-t--global--icon--color--brand--hover);
+}
+
 .provider-admin-organizations__billing-summary.pf-v6-c-content--p {
   margin: 0;
 }

@@ -59,6 +59,7 @@ import {
   ORGANIZATION_SETUP_FILTER_OPTIONS,
   organizationMatchesSearch,
   PROVIDER_ORGANIZATIONS_DEMO,
+  shouldShowExternalBillingId,
   type OrganizationSetupFilter,
   type OrganizationSetupNextAction,
   type RegisteredOrganization,
@@ -137,30 +138,6 @@ function renderOrganizationBillingPendingLabel(organization: RegisteredOrganizat
       label={inactive ? 'Billing account inactive' : 'Billing pending'}
       tooltip={getOrganizationBillingPendingTooltip(organization)}
     />
-  )
-}
-
-function renderExternalBillingIdValue(
-  organization: RegisteredOrganization,
-  onAddOrEdit: (organization: RegisteredOrganization) => void,
-) {
-  const externalBillingId = organization.externalBillingId?.trim() || ''
-
-  if (!externalBillingId) {
-    return (
-      <Button variant="link" isInline onClick={() => onAddOrEdit(organization)}>
-        Add external billing ID
-      </Button>
-    )
-  }
-
-  return (
-    <span className="provider-admin-organizations__card-billing">
-      <span>{externalBillingId}</span>
-      <Button variant="link" isInline onClick={() => onAddOrEdit(organization)}>
-        Edit
-      </Button>
-    </span>
   )
 }
 
@@ -420,7 +397,10 @@ export function ProviderAdminOrganizationsPage({
   }
 
   const openBillingSetup = (organization: RegisteredOrganization, returnToDetails = false) => {
-    // Same editable Edit-tenant wizard, but land on Billing.
+    // Design 1: Edit-tenant wizard lands on Billing. Design 2 edits External billing ID inline.
+    if (isExternalBillingOnlyDesign) {
+      return
+    }
     setSelectedOrganization(organization)
     setEditingOrganization(organization)
     setOnboardingResumeOrganization(null)
@@ -431,6 +411,25 @@ export function ProviderAdminOrganizationsPage({
     if (getWorkspaceActionParam(searchParams) === WORKSPACE_ACTION_REGISTER_TENANT) {
       syncWorkspaceActionParam(setSearchParams, null, { replace: true })
     }
+  }
+
+  const handleExternalBillingIdChange = (
+    organization: RegisteredOrganization,
+    externalBillingId: string,
+  ) => {
+    const updated = updateProviderRegisteredOrganization(organization.id, {
+      externalBillingId,
+    })
+    if (!updated) {
+      return
+    }
+    // Avoid ensureProviderDemoOrganizations() — it reseeds demo tenants and would wipe the edit.
+    setOrganizations((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item)),
+    )
+    setSelectedOrganization((current) =>
+      current?.id === updated.id ? updated : current,
+    )
   }
 
   const closeOnboardingWizard = () => {
@@ -513,6 +512,7 @@ export function ProviderAdminOrganizationsPage({
         billingAccountId: organization.billingAccountId,
         billingAccountName: organization.billingAccountName,
         billingAccountLinked: organization.billingAccountLinked,
+        externalBillingId: organization.externalBillingId,
         tenantSetupStatus: organization.tenantSetupStatus,
       })
     } else {
@@ -685,7 +685,11 @@ export function ProviderAdminOrganizationsPage({
           onBack={closeDetails}
           onEdit={() => openEdit(selectedOrganization, true)}
           onRemove={() => openRemove(selectedOrganization)}
-          onReviewBilling={(organization) => openBillingSetup(organization, true)}
+          onReviewBilling={
+            isExternalBillingOnlyDesign
+              ? undefined
+              : (organization) => openBillingSetup(organization, true)
+          }
           onReviewIdentityProvider={(organization) => {
             if (organization.identityProviderConnected) {
               openIdpDirectory(organization)
@@ -695,6 +699,9 @@ export function ProviderAdminOrganizationsPage({
           }}
           onReviewRoles={(organization) => setRolesOrganization(organization)}
           onOrganizationChange={(organization) => refreshOrganizations(organization.id)}
+          onExternalBillingIdChange={
+            isExternalBillingOnlyDesign ? handleExternalBillingIdChange : undefined
+          }
           externalBillingOnly={isExternalBillingOnlyDesign}
         />
       ) : (
@@ -898,15 +905,16 @@ export function ProviderAdminOrganizationsPage({
                           </dt>
                           <dd className="provider-admin-catalog-items__spec-value">
                             {isExternalBillingOnlyDesign ? (
-                              renderExternalBillingIdValue(org, openBillingSetup)
+                              org.externalBillingId?.trim() ? (
+                                <code>{org.externalBillingId.trim()}</code>
+                              ) : (
+                                '—'
+                              )
                             ) : isOrganizationBillingPending(org) ? (
                               renderOrganizationBillingPendingLabel(org)
                             ) : (
                               <span className="provider-admin-organizations__card-billing">
                                 <span>{getOrganizationBillingAccountDisplay(org)}</span>
-                                {org.externalBillingId?.trim() ? (
-                                  <span>{org.externalBillingId.trim()}</span>
-                                ) : null}
                               </span>
                             )}
                           </dd>
@@ -1086,8 +1094,12 @@ export function ProviderAdminOrganizationsPage({
                     ) : null}
                     <Td modifier="wrap" dataLabel="External billing ID">
                       {isExternalBillingOnlyDesign ? (
-                        renderExternalBillingIdValue(org, openBillingSetup)
-                      ) : org.externalBillingId?.trim() ? (
+                        org.externalBillingId?.trim() ? (
+                          <code>{org.externalBillingId.trim()}</code>
+                        ) : (
+                          '—'
+                        )
+                      ) : shouldShowExternalBillingId(org) && org.externalBillingId?.trim() ? (
                         <code>{org.externalBillingId.trim()}</code>
                       ) : (
                         '—'

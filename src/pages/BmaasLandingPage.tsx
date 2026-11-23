@@ -120,7 +120,7 @@ const LANDING_TOPICS: TopicCard[] = [
     title: 'External billing ID',
     description:
       'Compare Provider Admin designs for capturing and showing an optional external billing identifier on tenants.',
-    status: 'In progress',
+    status: 'In review',
     jira: {
       key: 'OSAC-6161',
       href: 'https://redhat.atlassian.net/browse/OSAC-6161',
