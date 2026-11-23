@@ -223,7 +223,6 @@ export function TenantOnboardingWizard({
     const stepIndex = TENANT_ONBOARDING_STEPS.findIndex((step) => step.id === initialStepId)
     return stepIndex >= 0 ? stepIndex + 1 : 1
   })()
-  const isOptionA = billingDesignVariant === 'option-a'
   const isOptionB = billingDesignVariant === 'option-b'
   /** Option B Telus path: no integrated billing — external ID only. */
   const hideIntegratedBillingUi = isOptionB
